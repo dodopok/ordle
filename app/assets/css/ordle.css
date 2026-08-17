@@ -1,0 +1,100 @@
+@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  /* superfícies */
+  --ord-bg: #fbf9f4; /* pergaminho, não branco puro */
+  --ord-surface: #ffffff;
+  --ord-ink: #1c1a17;
+  --ord-muted: #6e6a62;
+  --ord-rule: #dcd6c8;
+
+  /* feedback — fixos, nunca mudam entre partidas */
+  --ord-correct: #3e6b4f; /* verde de tempo comum */
+  --ord-present: #b4813c; /* ouro de alfaia */
+  --ord-absent: #8a857c;
+
+  /* acento do dia: cor litúrgica vinda da Estêvão API.
+     Valor literal de propósito: `var(--ord-correct)` aqui seria resolvido no
+     :root, onde o tema ainda é o claro — o [data-theme] mora na página. */
+  --ord-accent: #3e6b4f;
+
+  --ord-key: #e8e3d7;
+
+  --ord-display: 'EB Garamond', 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+  --ord-ui: 'Inter', 'Public Sans', system-ui, -apple-system, sans-serif;
+
+  --ord-tile: clamp(2.75rem, 13vw, 3.75rem);
+  --ord-gap: 6px;
+}
+
+/* cor do dia — só no filete e no número do jogo, nunca nos tiles */
+[data-color='green'] { --ord-accent: #3e6b4f; }
+[data-color='purple'] { --ord-accent: #5b4275; }
+[data-color='red'] { --ord-accent: #9b2c2c; }
+[data-color='white'] { --ord-accent: #b08d3f; }
+[data-color='rose'] { --ord-accent: #c2748f; }
+
+[data-theme='dark'] {
+  --ord-bg: #14130f;
+  --ord-surface: #1e1c18;
+  --ord-ink: #f2eee4;
+  --ord-muted: #9b958a;
+  --ord-rule: #34302a;
+  --ord-correct: #4d8462;
+  --ord-present: #c8934a;
+  --ord-absent: #55514a;
+  --ord-key: #33302a;
+}
+
+/* alto contraste: troca ouro/verde por azul/laranja (deuteranopia) */
+[data-contrast='high'] {
+  --ord-correct: #1f6feb;
+  --ord-present: #d97706;
+}
+
+* { box-sizing: border-box; }
+
+html,
+body,
+#__nuxt {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--ord-bg);
+  color: var(--ord-ink);
+  font-family: var(--ord-ui);
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ord-accent);
+  outline-offset: 2px;
+}
+
+.ord-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
