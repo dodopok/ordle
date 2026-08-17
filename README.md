@@ -39,6 +39,13 @@ Settings → Environment Variables, nos três ambientes:
 Sem `ORDLE_SECRET` o servidor devolve 500 em vez de assinar com a chave de dev,
 que é pública — ver "fail-closed" abaixo.
 
+**Analytics**: `@vercel/analytics/nuxt` está nos módulos. É sem cookie e sem
+identificador de usuário, então não pede banner de consentimento. Só coleta
+rodando na Vercel — em dev e num `node .output/server/index.mjs` o script é
+injetado mas o endpoint `/_vercel/insights/script.js` dá 404, o que é esperado:
+quem serve esse caminho é a borda da Vercel. Ative Analytics no painel do
+projeto, senão o script carrega e nada é registrado.
+
 Duas coisas guardam estado em memória do processo e, em serverless, valem por
 instância: o **rate limit** (30 req/min vira 30 por lambda — na prática mais
 frouxo) e o **cache da cor litúrgica** (cada instância nova paga um round-trip).
