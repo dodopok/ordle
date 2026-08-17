@@ -7,7 +7,7 @@ export type LiturgicalDay = {
   celebration: string
   /**
    * Referência do salmo do dia ("Salmo 130"), quando a API traz.
-   * É o que dá concretude ao gancho do Ordo: dizer o que se reza hoje prova
+   * É o que dá concretude ao gancho do Ordo: dizer o que o Ofício traz hoje prova
    * que o app tem conteúdo, coisa que "baixe nosso aplicativo" não faz.
    */
   psalm?: string

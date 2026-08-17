@@ -174,13 +174,20 @@ linha, sem banner — interstício converte pior num jogo diário. Então o que
 melhora aqui é **especificidade**, não tamanho:
 
 - a linha de contexto (celebração, tempo, cor) fica pequena e discreta;
-- a oferta é concreta — "No Ofício de hoje se reza o Salmo 130", com o salmo
-  vindo da API. Dizer o que se reza hoje prova que o app tem conteúdo, coisa
+- a oferta é concreta — "O Ofício de hoje traz o Salmo 130", com o salmo vindo
+  da API. Dizer o que o Ofício traz hoje prova que o app tem conteúdo, coisa
   que "baixe nosso aplicativo" não faz. Sem o salmo, cai numa frase genérica;
-- o link aponta para `/oficio-diario`, a landing do Ofício — não para a home
-  nem para a loja de apps, que é o degrau que derruba a conversão;
-- com UTMs (`utm_source=ordle`), para dar para medir se o jogo traz gente de
-  fato. Sem medir, "propaganda discreta" vira suposição.
+- o botão leva para onde faz sentido em cada aparelho: Google Play no Android,
+  App Store no iOS, `/oficio-diario` no desktop (onde não há app para
+  instalar). O rótulo diz o destino — isca converte pior;
+- cada destino leva o parâmetro de campanha que ele entende: loja ignora UTM
+  solto, então o Play recebe `referrer` e a App Store recebe `ct`. Sem medir,
+  "propaganda discreta" vira suposição.
+
+O vocabulário evita "rezar", que é marcado como católico: o Ordo também atende
+público evangélico, e "orar"/"o Ofício traz" passam em qualquer tradição. Vale
+para as definições das palavras também — TERÇA e SEXTA falam em "hora menor do
+Ofício", não em "hora rezada".
 
 ## Antifraude
 

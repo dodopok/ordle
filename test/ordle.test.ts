@@ -4,7 +4,7 @@ import { isValidGuess } from '../server/utils/dictionary'
 import { answerFor, gameId, gameNumber, grade, nextRolloverAt, normalize } from '../server/utils/ordle'
 import { computeLiturgicalDay, easter, extractDay, parseColor } from '../server/utils/liturgy'
 import { cookieOptions, seal, unseal } from '../server/utils/session'
-import { keyboardState, shareText } from '../app/utils/ordle-shared'
+import { detectPlatform, keyboardState, shareText } from '../app/utils/ordle-shared'
 
 const marks = (guess: string, answer: string) => grade(guess, answer).join(' ')
 
@@ -434,5 +434,58 @@ describe('segredo da sessão (fail-closed)', () => {
     await withEnv({ NODE_ENV: 'production' }, () => expect(cookieOptions().secure).toBe(true))
     await withEnv({ NODE_ENV: undefined }, () => expect(cookieOptions().secure).toBe(true))
     await withEnv({ NODE_ENV: 'development' }, () => expect(cookieOptions().secure).toBe(false))
+  })
+})
+
+describe('detectPlatform (destino do gancho do Ordo)', () => {
+  const UA = {
+    iphone:
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+    ipadAntigo:
+      'Mozilla/5.0 (iPad; CPU OS 12_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.1 Mobile/15E148 Safari/604.1',
+    // iPadOS 13+ se apresenta como Macintosh: só o UA não distingue
+    ipadNovo:
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15',
+    android:
+      'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Mobile Safari/537.36',
+    mac: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36',
+    windowsTouch:
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36',
+  }
+
+  it('celular vai para a loja da plataforma', () => {
+    expect(detectPlatform(UA.iphone)).toBe('ios')
+    expect(detectPlatform(UA.ipadAntigo)).toBe('ios')
+    expect(detectPlatform(UA.android, 5)).toBe('android')
+  })
+
+  it('iPad novo é reconhecido pelo touch, já que o UA diz Macintosh', () => {
+    expect(detectPlatform(UA.ipadNovo, 5)).toBe('ios')
+    expect(detectPlatform(UA.ipadNovo, 0)).toBe('desktop')
+  })
+
+  it('desktop vai para o site', () => {
+    expect(detectPlatform(UA.mac)).toBe('desktop')
+    expect(detectPlatform(UA.windowsTouch)).toBe('desktop')
+  })
+
+  it('notebook Windows com tela de toque não vira celular', () => {
+    // a heurística de touch vale só para o UA de Mac; sem essa restrição um
+    // Surface cairia na App Store
+    expect(detectPlatform(UA.windowsTouch, 10)).toBe('desktop')
+  })
+
+  it('UA desconhecido cai no desktop, que é o destino que sempre funciona', () => {
+    expect(detectPlatform('')).toBe('desktop')
+    expect(detectPlatform('curl/8.4.0')).toBe('desktop')
+  })
+})
+
+describe('vocabulário', () => {
+  it('nenhuma definição usa "rezar", marcado como católico', () => {
+    // o Ordo também atende público evangélico: "orar" e "o Ofício traz"
+    // passam em qualquer tradição
+    const comReza = WORDS.filter((w) => /\brez/i.test(w.definition))
+    expect(comReza.map((w) => `${w.word}: ${w.definition}`)).toEqual([])
   })
 })

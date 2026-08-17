@@ -5,6 +5,23 @@
  */
 export type Mark = 'correct' | 'present' | 'absent'
 export type GameStatus = 'playing' | 'won' | 'lost'
+export type Platform = 'ios' | 'android' | 'desktop'
+
+/**
+ * Para onde mandar quem clica no gancho do Ordo: loja da plataforma no
+ * celular, site no desktop.
+ *
+ * A ordem importa. O iPad a partir do iPadOS 13 se apresenta como Macintosh,
+ * então só o user agent não distingue — o que o denuncia é ter touch. A
+ * heurística de touch fica restrita ao UA de Mac de propósito: notebook
+ * Windows com tela sensível ao toque não pode virar "celular".
+ */
+export function detectPlatform(ua: string, maxTouchPoints = 0): Platform {
+  if (/android/i.test(ua)) return 'android'
+  if (/iphone|ipad|ipod/i.test(ua)) return 'ios'
+  if (/macintosh/i.test(ua) && maxTouchPoints > 1) return 'ios'
+  return 'desktop'
+}
 
 export const WORD_LENGTH = 5
 export const MAX_ATTEMPTS = 6

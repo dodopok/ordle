@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { MAX_ATTEMPTS, shareText, type GameStatus, type Mark } from '../../utils/ordle-shared'
+import {
+  MAX_ATTEMPTS,
+  detectPlatform,
+  shareText,
+  type GameStatus,
+  type Mark,
+} from '../../utils/ordle-shared'
 import type { Stats } from '../../composables/useOrdleStorage'
 
 const props = defineProps<{
@@ -18,29 +24,69 @@ const props = defineProps<{
 }>()
 
 /**
- * Aponta para a landing do Ofício, não para a home nem para a loja de apps:
- * o link é o produto, e pular degraus derruba a conversão. As UTMs existem
- * para dar para medir se o jogo de fato traz gente — sem medir, "propaganda
- * discreta" vira suposição.
- */
-/**
  * A oferta. Com o salmo do dia ela é concreta e verificável; sem ele sobra a
  * versão genérica, que converte pior mas nunca some.
  */
 const hookLine = computed(() =>
-  props.psalm
-    ? `No Ofício de hoje se reza o ${props.psalm}.`
-    : 'O Ofício de hoje já está no Ordo.',
+  props.psalm ? `O Ofício de hoje traz o ${props.psalm}.` : 'O Ofício de hoje já está no Ordo.',
 )
 
+/**
+ * Plataforma resolvida já no setup, não no onMounted: a página é `ssr: false`,
+ * então `navigator` existe aqui. Detectar depois faria o botão piscar com o
+ * rótulo de desktop antes de virar o da loja.
+ */
+const platform = import.meta.client
+  ? detectPlatform(navigator.userAgent, navigator.maxTouchPoints)
+  : 'desktop'
+
+const APP_STORE_ID = '6756016908'
+const PLAY_PACKAGE = 'br.com.caminhoanglicano.ordo'
+
+const campaign = computed(() => (props.status === 'won' ? 'vitoria' : 'derrota'))
+
+/**
+ * Celular vai direto para a loja da plataforma; desktop vai para a landing do
+ * Ofício, onde não há app para instalar.
+ *
+ * Cada destino leva o parâmetro de campanha que ele entende: loja ignora UTM
+ * solto, então o Google Play recebe `referrer` e a App Store recebe `ct`. Sem
+ * isso não dá para saber se o jogo instala alguém.
+ */
 const ordoUrl = computed(() => {
+  if (platform === 'android') {
+    const u = new URL('https://play.google.com/store/apps/details')
+    u.searchParams.set('id', PLAY_PACKAGE)
+    u.searchParams.set(
+      'referrer',
+      `utm_source=ordle&utm_medium=jogo&utm_campaign=resultado&utm_content=${campaign.value}`,
+    )
+    return u.toString()
+  }
+
+  if (platform === 'ios') {
+    const u = new URL(`https://apps.apple.com/br/app/id${APP_STORE_ID}`)
+    u.searchParams.set('ct', `ordle-${campaign.value}`)
+    u.searchParams.set('mt', '8')
+    return u.toString()
+  }
+
   const u = new URL('https://www.oficio.app/oficio-diario')
   u.searchParams.set('utm_source', 'ordle')
   u.searchParams.set('utm_medium', 'jogo')
   u.searchParams.set('utm_campaign', 'resultado')
-  u.searchParams.set('utm_content', props.status === 'won' ? 'vitoria' : 'derrota')
+  u.searchParams.set('utm_content', campaign.value)
   return u.toString()
 })
+
+/** o rótulo diz para onde o link leva de verdade — isca converte pior */
+const ordoLabel = computed(() =>
+  platform === 'android'
+    ? 'Baixar o Ordo no Google Play'
+    : platform === 'ios'
+      ? 'Baixar o Ordo na App Store'
+      : 'Abrir o Ofício de hoje',
+)
 
 const emit = defineEmits<{ (e: 'close'): void }>()
 
@@ -114,9 +160,9 @@ async function share() {
       3: o gancho para o Ordo.
 
       Continua sendo uma linha, sem banner — interstício converte pior num jogo
-      diário. O que melhora a conversão aqui é a especificidade: dizer o que se
-      reza HOJE prova que o app tem conteúdo, coisa que "baixe nosso aplicativo"
-      não faz. Por isso o salmo do dia entra quando a API o traz.
+      diário. O que melhora a conversão aqui é a especificidade: dizer o que o
+      Ofício traz HOJE prova que o app tem conteúdo, coisa que "baixe nosso
+      aplicativo" não faz. Por isso o salmo do dia entra quando a API o traz.
     -->
     <aside class="hook">
       <p class="hook__day">
@@ -126,7 +172,7 @@ async function share() {
       </p>
       <p class="hook__line">{{ hookLine }}</p>
       <a class="hook__btn" :href="ordoUrl" target="_blank" rel="noopener">
-        Rezar o Ofício de hoje
+        {{ ordoLabel }}
       </a>
     </aside>
 
