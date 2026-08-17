@@ -54,6 +54,20 @@ export function keyboardState(guesses: string[], results: Mark[][]): Record<stri
 const EMOJI: Record<Mark, string> = { correct: '🟩', present: '🟨', absent: '⬜' }
 const EMOJI_DARK: Record<Mark, string> = { correct: '🟩', present: '🟨', absent: '⬛' }
 
+/**
+ * A primeira linha do texto compartilhado.
+ *
+ * "2/6" é convenção de quem já joga; num grupo de WhatsApp onde a maioria
+ * nunca viu o jogo, uma frase diz a mesma coisa e ainda explica o que é. O
+ * número continua ali — dá para comparar com o do vizinho do mesmo jeito.
+ */
+export function shareHeadline(gameNumber: number, attempts: number, status: GameStatus) {
+  const jogo = `o Ordle #${gameNumber}`
+  if (status !== 'won') return `Não acertei ${jogo} hoje.`
+  if (attempts === 1) return `Acertei ${jogo} de primeira!`
+  return `Acertei ${jogo} em ${attempts} tentativas.`
+}
+
 export function shareText(opts: {
   gameNumber: number
   results: Mark[][]
@@ -62,7 +76,7 @@ export function shareText(opts: {
   url?: string
 }) {
   const palette = opts.dark ? EMOJI_DARK : EMOJI
-  const score = opts.status === 'won' ? `${opts.results.length}/${MAX_ATTEMPTS}` : `X/${MAX_ATTEMPTS}`
+  const headline = shareHeadline(opts.gameNumber, opts.results.length, opts.status)
   const grid = opts.results.map((row) => row.map((m) => palette[m]).join('')).join('\n')
-  return `Ordle #${opts.gameNumber} · ${score}\n\n${grid}\n\n${opts.url ?? 'ofício.app'}`
+  return `${headline}\n\n${grid}\n\n${opts.url ?? 'ofício.app'}`
 }
