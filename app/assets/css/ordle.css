@@ -23,8 +23,44 @@
   --ord-display: 'EB Garamond', 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
   --ord-ui: 'Inter', 'Public Sans', system-ui, -apple-system, sans-serif;
 
-  --ord-tile: clamp(2.75rem, 13vw, 3.75rem);
+  /*
+   * O tile é limitado pela largura E pela altura. Sem o segundo termo, um
+   * celular baixo empurra o teclado para fora da tela: são 6 fileiras de tile
+   * mais header e teclado, e 13vw ignora isso por completo.
+   *
+   * `--ord-chrome` é o que não é tabuleiro (header + teclado + folgas). Ele
+   * acompanha os mesmos breakpoints em que as teclas encolhem — uma constante
+   * só erra nos dois extremos.
+   */
+  /* medidos no browser, não estimados: header 68px + teclado + padding do
+     tabuleiro, em cada faixa de altura */
+  --ord-chrome: 18rem;
   --ord-gap: 6px;
+  --ord-tile: max(
+    2rem,
+    min(
+      clamp(2.75rem, 13vw, 3.75rem),
+      calc((100dvh - var(--ord-chrome) - 5 * var(--ord-gap)) / 6)
+    )
+  );
+}
+
+@media (max-height: 700px) {
+  :root { --ord-chrome: 16.5rem; }
+}
+
+@media (max-height: 560px) {
+  :root { --ord-chrome: 14.75rem; --ord-gap: 4px; }
+}
+
+/*
+ * Celular deitado: 6 fileiras mais o teclado não cabem em 390px de altura de
+ * jeito nenhum — encolher até caber daria tile de 23px, ilegível. Em paisagem
+ * o tabuleiro e o teclado vão lado a lado, e aí sobra altura para os dois.
+ */
+@media (orientation: landscape) and (max-height: 560px) {
+  /* aqui o teclado sai de baixo do tabuleiro, então o cromo é só o header */
+  :root { --ord-chrome: 6.5rem; }
 }
 
 /* cor do dia — só no filete e no número do jogo, nunca nos tiles */
@@ -65,14 +101,42 @@ body {
   background: var(--ord-bg);
   color: var(--ord-ink);
   font-family: var(--ord-ui);
+  /* o Safari aumenta a fonte sozinho ao girar o aparelho; aqui isso quebraria
+     o cálculo de altura do tile e jogaria o teclado para fora da tela */
   -webkit-text-size-adjust: 100%;
+  /* mata o pull-to-refresh e o rubber-band: puxar a tela no meio da partida
+     não pode recarregar o jogo */
   overscroll-behavior: none;
+  /*
+   * Mata o duplo-toque que dá zoom — o que de fato atrapalha quem digita
+   * rápido no teclado da tela. O pinch-to-zoom continua funcionando: quem
+   * precisa ampliar, amplia. `user-scalable=no` no viewport seria o caminho
+   * errado (falha de acessibilidade, e o iOS ignora desde o iOS 10).
+   */
+  touch-action: manipulation;
+}
+
+/* tabuleiro e teclado não são texto para copiar: segurar o dedo num tile não
+   pode abrir a bolha de seleção do iOS nem pintar o tile de azul */
+.ordle {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* o modal, sim: a definição do termo é o tipo de coisa que se quer copiar */
+.modal__body {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
 }
 
 button {
   font-family: inherit;
   color: inherit;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 :focus-visible {

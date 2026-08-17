@@ -79,14 +79,26 @@ function press(k: string) {
   font-size: 1rem;
 }
 
-.kb__key:active { transform: translateY(1px); }
+/* o dedo cobre a tecla que aperta, então o feedback tem que ser visível na
+   borda: só o translateY não se enxerga embaixo do polegar */
+.kb__key:active {
+  transform: translateY(1px);
+  filter: brightness(0.88);
+}
+
 .kb__key:disabled { opacity: 0.6; cursor: default; }
 
 .kb__key.is-correct { background: var(--ord-correct); color: #fff; }
 .kb__key.is-present { background: var(--ord-present); color: #fff; }
 .kb__key.is-absent { background: var(--ord-absent); color: #fff; }
 
-@media (max-height: 640px) {
+@media (max-height: 700px) {
   .kb__key { height: 2.75rem; }
+}
+
+@media (max-height: 560px) {
+  .kb__key { height: 2.25rem; font-size: 0.8125rem; }
+  .kb { gap: 4px; }
+  .kb__row { gap: 4px; }
 }
 </style>

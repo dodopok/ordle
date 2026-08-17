@@ -83,6 +83,23 @@ pré-carregado.
 **Acentos são ignorados na digitação.** Toda comparação usa a forma normalizada
 (`key`); a acentuada (`word`) só aparece no reveal. `UNCAO` vale para `UNÇÃO`.
 
+**Mobile é o caso principal, não o adaptado.** A maior parte do tráfego vem de
+link de WhatsApp aberto no celular, então:
+
+- `touch-action: manipulation` mata o duplo-toque que dá zoom — o que de fato
+  atrapalha quem digita rápido. O pinch-to-zoom continua funcionando:
+  `user-scalable=no` seria falha de acessibilidade (WCAG 1.4.4) e o iOS ignora
+  essa flag desde o iOS 10.
+- `overscroll-behavior: none` tira o pull-to-refresh: puxar a tela no meio da
+  partida não pode recarregar o jogo.
+- O tile é limitado pela largura **e** pela altura: `--ord-chrome` (header +
+  teclado + folgas, medidos no browser) sai de 100dvh antes da divisão, com os
+  5 gaps descontados. Sem isso o teclado sai da tela em aparelho baixo.
+- Deitado, tabuleiro e teclado vão lado a lado — 6 fileiras mais o teclado não
+  cabem em 390px de altura, e encolher até caber daria tile de 23px.
+- Alvos de toque de 44px, feedback no `:active` (no touch não existe hover),
+  `env(safe-area-inset-*)` no header, no teclado e no modal.
+
 **A cor do dia é o único acento variável.** O filete de 3px no header e o número
 do jogo saem na cor litúrgica de hoje — roxo na Quaresma, rosa no Gaudete,
 vermelho em mártires. As três cores de feedback (verde/ouro/cinza) são fixas: a
