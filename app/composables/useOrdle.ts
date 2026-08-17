@@ -13,6 +13,7 @@ type StateResponse = {
   liturgicalColor: string
   liturgicalSeason: string
   liturgicalCelebration: string
+  liturgicalPsalm: string | null
   answer?: string
   definition?: string
 }
@@ -25,6 +26,8 @@ type GuessResponse = {
   definition?: string
 }
 
+const emptyRow = () => Array<string>(WORD_LENGTH).fill('')
+
 export function useOrdle() {
   const storage = useOrdleStorage()
 
@@ -33,13 +36,20 @@ export function useOrdle() {
     gameNumber: 0,
     guesses: [] as string[],
     results: [] as Mark[][],
-    current: '',
+    /**
+     * A linha em digitação, uma célula por posição. É array e não string
+     * porque dá para clicar num quadrado e preencher fora de ordem — com
+     * string não haveria como representar "___O_".
+     */
+    current: Array<string>(WORD_LENGTH).fill(''),
+    cursor: 0,
     status: 'playing' as GameStatus,
     answer: null as string | null,
     definition: null as string | null,
     liturgicalColor: 'green',
     liturgicalSeason: '',
     liturgicalCelebration: '',
+    liturgicalPsalm: null as string | null,
     nextRolloverAt: 0,
     busy: false,
     ready: false,
@@ -84,8 +94,10 @@ export function useOrdle() {
         liturgicalColor: server.liturgicalColor,
         liturgicalSeason: server.liturgicalSeason,
         liturgicalCelebration: server.liturgicalCelebration,
+        liturgicalPsalm: server.liturgicalPsalm ?? null,
         nextRolloverAt: server.nextRolloverAt,
-        current: '',
+        current: emptyRow(),
+        cursor: 0,
         rollover: false,
       })
       storage.saveGame(state)
@@ -100,31 +112,95 @@ export function useOrdle() {
     }
   }
 
-  function type(letter: string) {
-    if (!canType.value) return
-    if (state.current.length < WORD_LENGTH) state.current += letter
+  /**
+   * Próxima célula vazia a partir de `from`, dando a volta na linha. Se a
+   * linha estiver cheia, fica onde está — aí digitar sobrescreve, que é o
+   * comportamento previsível de uma grade com cursor.
+   */
+  function nextEmpty(from: number): number {
+    for (let i = 0; i < WORD_LENGTH; i++) {
+      const idx = (from + i) % WORD_LENGTH
+      if (!state.current[idx]) return idx
+    }
+    return Math.min(from, WORD_LENGTH - 1)
   }
 
+  /** Move o cursor para um quadrado específico (clique no tabuleiro). */
+  function focusCell(index: number) {
+    if (!canType.value) return
+    if (index < 0 || index >= WORD_LENGTH) return
+    state.cursor = index
+  }
+
+  function type(letter: string) {
+    if (!canType.value) return
+    state.current[state.cursor] = letter
+    state.cursor = nextEmpty(state.cursor + 1)
+  }
+
+  /**
+   * Apaga a célula do cursor; se ela já estiver vazia, apaga a letra
+   * preenchida mais próxima à esquerda, dando a volta na linha.
+   *
+   * A volta importa: depois de preencher a última casa o cursor volta para o
+   * começo, e um backspace que só olhasse para `cursor - 1` não apagaria nada
+   * ali — o jogador aperta ⌫ e a tela não reage. Com a linha não vazia, ⌫
+   * sempre tira alguma letra.
+   */
   function backspace() {
     if (!canType.value) return
-    state.current = state.current.slice(0, -1)
+    if (state.current[state.cursor]) {
+      state.current[state.cursor] = ''
+      return rewindIfEmpty()
+    }
+    for (let i = 1; i <= WORD_LENGTH; i++) {
+      const idx = (state.cursor - i + WORD_LENGTH * 2) % WORD_LENGTH
+      if (state.current[idx]) {
+        state.current[idx] = ''
+        state.cursor = idx
+        return rewindIfEmpty()
+      }
+    }
+  }
+
+  /**
+   * Linha vazia volta a começar do zero. Sem isso o cursor fica onde a última
+   * letra foi apagada e, como ele dá a volta ao chegar no fim, digitar uma
+   * palavra inteira a partir do meio sairia embaralhada: com o cursor em 3,
+   * "SALM" viraria "LM_SA".
+   */
+  function rewindIfEmpty() {
+    if (state.current.every((c) => !c)) state.cursor = 0
+  }
+
+  function moveCursor(delta: number) {
+    if (!canType.value) return
+    state.cursor = Math.min(WORD_LENGTH - 1, Math.max(0, state.cursor + delta))
   }
 
   async function submit() {
     if (!canType.value) return
     if (state.guesses.length >= MAX_ATTEMPTS) return
-    if (state.current.length < WORD_LENGTH) return bump('Faltam letras')
+
+    const guess = state.current.join('')
+    // com preenchimento fora de ordem dá para deixar buraco no meio, então
+    // não basta contar o tamanho: tem que checar célula por célula
+    if (guess.length < WORD_LENGTH) {
+      state.cursor = nextEmpty(0)
+      return bump('Faltam letras')
+    }
 
     state.busy = true
     try {
       const r = await $fetch<GuessResponse>('/api/ordle/guess', {
         method: 'POST',
-        body: { guess: state.current },
+        body: { guess },
       })
       const row = state.guesses.length
-      state.guesses.push(normalize(state.current))
+      state.guesses.push(normalize(guess))
       state.results.push(r.result)
-      state.current = ''
+      state.current = emptyRow()
+      state.cursor = 0
       state.status = r.status
       state.reveal = row
       if (r.answer) {
@@ -178,6 +254,12 @@ export function useOrdle() {
       backspace()
       return
     }
+    // as setas andam pela linha, par natural do clique no quadrado
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault()
+      moveCursor(e.key === 'ArrowLeft' ? -1 : 1)
+      return
+    }
     // normalize dá conta do teclado ABNT: "ç" vira "C", "á" vira "A"
     const letter = normalize(e.key)
     if (letter.length === 1 && letter >= 'A' && letter <= 'Z') type(letter)
@@ -198,5 +280,5 @@ export function useOrdle() {
     clearTimeout(shakeTimer)
   })
 
-  return { state, keys, type, backspace, submit, bump, boot }
+  return { state, keys, type, backspace, submit, bump, boot, focusCell, moveCursor }
 }

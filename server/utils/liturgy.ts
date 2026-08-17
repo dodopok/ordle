@@ -5,6 +5,12 @@ export type LiturgicalDay = {
   season: string
   /** Rótulo curto do dia, usado no gancho da tela de resultado. */
   celebration: string
+  /**
+   * Referência do salmo do dia ("Salmo 130"), quando a API traz.
+   * É o que dá concretude ao gancho do Ordo: dizer o que se reza hoje prova
+   * que o app tem conteúdo, coisa que "baixe nosso aplicativo" não faz.
+   */
+  psalm?: string
 }
 
 /**
@@ -110,6 +116,7 @@ export function extractDay(payload: unknown, gameId: string): LiturgicalDay | nu
   const celebration = asRecord(node.celebration)
   const drivesTheDay = celebration && parseColor(celebration.color) === color
   const fallback = computeLiturgicalDay(gameId)
+  const psalm = trimmed(asRecord(asRecord(node.readings)?.psalm)?.reference)
 
   return {
     color,
@@ -118,6 +125,7 @@ export function extractDay(payload: unknown, gameId: string): LiturgicalDay | nu
       (drivesTheDay ? trimmed(celebration.name) : null) ??
       trimmed(node.sunday_name) ??
       fallback.celebration,
+    ...(psalm && { psalm }),
   }
 }
 

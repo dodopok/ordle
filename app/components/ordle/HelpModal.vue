@@ -34,6 +34,10 @@ const examples = [
     <p class="muted">
       Acentos são ignorados: digite <strong>PATIO</strong> para <strong>PÁTIO</strong>.
     </p>
+    <p class="muted">
+      Dá para <strong>tocar num quadrado</strong> e escrever a letra direto naquela posição —
+      útil quando você já sabe onde uma letra entra.
+    </p>
 
     <div v-for="ex in examples" :key="ex.word" class="ex">
       <div class="ex__row">

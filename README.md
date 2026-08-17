@@ -80,6 +80,15 @@ em `America/Sao_Paulo`, e indexa uma permutação da lista embaralhada com seed
 fixa (`server/utils/ordle.ts`). Sem estado, sem banco, e o dia seguinte nunca é
 pré-carregado.
 
+**Dá para preencher fora de ordem.** Tocar num quadrado leva o cursor para
+aquela posição, e a letra entra ali. Por isso a linha em digitação é um array
+de células e não uma string — `"___O_"` não se representa com string. Depois de
+escrever, o cursor pula para a próxima vaga livre (dando a volta na linha); o
+backspace limpa a célula atual e, se ela já estiver vazia, recua uma. Os
+quadrados da linha ativa são `<button>` de verdade, com roving tabindex: só o
+selecionado é tabulável e o foco segue o cursor, senão foco e cursor divergem e
+aparecem dois quadrados marcados ao mesmo tempo.
+
 **Acentos são ignorados na digitação.** Toda comparação usa a forma normalizada
 (`key`); a acentuada (`word`) só aparece no reveal. `UNCAO` vale para `UNÇÃO`.
 
@@ -157,6 +166,21 @@ dela bate com a do dia — festa que cede ao domingo vem com cor divergente. Em
 nomeia é o `sunday_name`. Já em 01/11/2026, Todos os Santos (`branco`) bate com
 o dia e vence o domingo, como manda a precedência de festa principal. O
 fallback local reproduz essa precedência com uma flag por festa fixa.
+
+## O gancho do Ordo
+
+A tela de resultado é a única que faz marketing, e o spec é explícito: uma
+linha, sem banner — interstício converte pior num jogo diário. Então o que
+melhora aqui é **especificidade**, não tamanho:
+
+- a linha de contexto (celebração, tempo, cor) fica pequena e discreta;
+- a oferta é concreta — "No Ofício de hoje se reza o Salmo 130", com o salmo
+  vindo da API. Dizer o que se reza hoje prova que o app tem conteúdo, coisa
+  que "baixe nosso aplicativo" não faz. Sem o salmo, cai numa frase genérica;
+- o link aponta para `/oficio-diario`, a landing do Ofício — não para a home
+  nem para a loja de apps, que é o degrau que derruba a conversão;
+- com UTMs (`utm_source=ordle`), para dar para medir se o jogo traz gente de
+  fato. Sem medir, "propaganda discreta" vira suposição.
 
 ## Antifraude
 
