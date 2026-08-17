@@ -273,6 +273,25 @@ describe('extractDay (payload real do Caminho Anglicano)', () => {
     expect(day).toEqual({ color: 'green', season: 'Tempo Comum', celebration: 'Féria' })
   })
 
+  it('pega o salmo do dia, que é o gancho do Ordo', () => {
+    const day = extractDay(
+      {
+        liturgical_color: 'verde',
+        liturgical_season: 'Tempo Comum',
+        readings: { psalm: { reference: 'Salmo 130', chapter: 130 } },
+      },
+      '2026-08-17',
+    )
+    expect(day?.psalm).toBe('Salmo 130')
+  })
+
+  it('sem salmo no payload, o campo simplesmente não vem', () => {
+    const semLeituras = extractDay({ liturgical_color: 'verde' }, '2026-08-17')
+    const semSalmo = extractDay({ liturgical_color: 'verde', readings: {} }, '2026-08-17')
+    expect(semLeituras).not.toHaveProperty('psalm')
+    expect(semSalmo).not.toHaveProperty('psalm')
+  })
+
   it('domingo comum: nomeia pelo sunday_name', () => {
     const day = extractDay(
       {

@@ -4,12 +4,15 @@ import { MAX_ATTEMPTS, WORD_LENGTH, type GameStatus, type Mark } from '../../uti
 const props = defineProps<{
   guesses: string[]
   results: Mark[][]
-  current: string
+  current: string[]
+  cursor: number
   status: GameStatus
   shake: boolean
   reveal: number
   win: boolean
 }>()
+
+const emit = defineEmits<{ (e: 'select', index: number): void }>()
 
 const rows = computed(() =>
   Array.from({ length: MAX_ATTEMPTS }, (_, row) => {
@@ -23,6 +26,11 @@ const rows = computed(() =>
       }
     return { letters: Array(WORD_LENGTH).fill(''), marks: null, done: false }
   }),
+)
+
+/** só a linha em digitação aceita clique, e só com a partida em andamento */
+const editable = computed(
+  () => props.status === 'playing' && props.guesses.length < MAX_ATTEMPTS,
 )
 
 const activeRow = computed(() => props.guesses.length)
@@ -57,6 +65,9 @@ const liveMessage = computed(() => {
         :index="i"
         :revealing="row.done && r === reveal"
         :bouncing="win && r === guesses.length - 1"
+        :interactive="editable && r === activeRow"
+        :selected="editable && r === activeRow && i === cursor"
+        @select="emit('select', i)"
       />
     </div>
     <p class="ord-sr" aria-live="polite">{{ liveMessage }}</p>

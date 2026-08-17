@@ -13,8 +13,34 @@ const props = defineProps<{
   season: string
   celebration: string
   color: string
+  psalm: string | null
   dark: boolean
 }>()
+
+/**
+ * Aponta para a landing do Ofício, não para a home nem para a loja de apps:
+ * o link é o produto, e pular degraus derruba a conversão. As UTMs existem
+ * para dar para medir se o jogo de fato traz gente — sem medir, "propaganda
+ * discreta" vira suposição.
+ */
+/**
+ * A oferta. Com o salmo do dia ela é concreta e verificável; sem ele sobra a
+ * versão genérica, que converte pior mas nunca some.
+ */
+const hookLine = computed(() =>
+  props.psalm
+    ? `No Ofício de hoje se reza o ${props.psalm}.`
+    : 'O Ofício de hoje já está no Ordo.',
+)
+
+const ordoUrl = computed(() => {
+  const u = new URL('https://www.oficio.app/oficio-diario')
+  u.searchParams.set('utm_source', 'ordle')
+  u.searchParams.set('utm_medium', 'jogo')
+  u.searchParams.set('utm_campaign', 'resultado')
+  u.searchParams.set('utm_content', props.status === 'won' ? 'vitoria' : 'derrota')
+  return u.toString()
+})
 
 const emit = defineEmits<{ (e: 'close'): void }>()
 
@@ -84,17 +110,25 @@ async function share() {
     <p class="reveal">{{ answer }}</p>
     <p class="definition">{{ definition }}</p>
 
-    <!-- 3: o gancho para o Ordo, uma linha só -->
-    <div class="hook">
-      <p>
-        Hoje é <strong>{{ celebration }}</strong> — {{ season }}, cor litúrgica
-        <span class="swatch" aria-hidden="true" /> {{ COLOR_PT[color] ?? color }}. O Ofício de hoje
-        está no Ordo.
+    <!--
+      3: o gancho para o Ordo.
+
+      Continua sendo uma linha, sem banner — interstício converte pior num jogo
+      diário. O que melhora a conversão aqui é a especificidade: dizer o que se
+      reza HOJE prova que o app tem conteúdo, coisa que "baixe nosso aplicativo"
+      não faz. Por isso o salmo do dia entra quando a API o traz.
+    -->
+    <aside class="hook">
+      <p class="hook__day">
+        <span class="swatch" aria-hidden="true" />
+        Hoje é <strong>{{ celebration }}</strong> — {{ season }}, cor
+        {{ COLOR_PT[color] ?? color }}.
       </p>
-      <a class="hook__btn" href="https://oficio.app" target="_blank" rel="noopener">
-        Abrir o Ofício de hoje
+      <p class="hook__line">{{ hookLine }}</p>
+      <a class="hook__btn" :href="ordoUrl" target="_blank" rel="noopener">
+        Rezar o Ofício de hoje
       </a>
-    </div>
+    </aside>
 
     <!-- 4: estatísticas -->
     <template v-if="stats">
@@ -159,27 +193,63 @@ async function share() {
   margin-bottom: 1.25rem;
 }
 
-.hook p { margin: 0 0 0.625rem; font-size: 0.875rem; line-height: 1.5; }
+/* a linha do dia é contexto: menor e discreta */
+.hook__day {
+  margin: 0 0 0.25rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--ord-muted);
+  letter-spacing: 0.01em;
+}
+
+.hook__day strong { color: var(--ord-ink); font-weight: 600; }
+
+/* a linha do salmo é a oferta: é ela que tem que ser lida */
+.hook__line {
+  margin: 0 0 0.75rem;
+  font-family: var(--ord-display);
+  font-size: 1.0625rem;
+  line-height: 1.35;
+}
 
 .swatch {
   display: inline-block;
-  width: 0.625rem;
-  height: 0.625rem;
+  width: 0.5rem;
+  height: 0.5rem;
   border-radius: 50%;
   background: var(--ord-accent);
   border: 1px solid var(--ord-rule);
-  vertical-align: baseline;
+  margin-right: 0.25rem;
 }
 
+/*
+ * Botão de verdade, não link de texto: é a única ação da tela além de
+ * compartilhar, e um alvo de 44px acerta com o polegar. Continua sendo uma
+ * linha dentro do bloco — não vira banner.
+ */
 .hook__btn {
-  display: inline-block;
-  font-size: 0.8125rem;
+  display: block;
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  border: 1px solid var(--ord-accent);
+  border-radius: 6px;
+  font-size: 0.875rem;
   font-weight: 600;
   text-decoration: none;
   color: var(--ord-accent);
+  background: color-mix(in srgb, var(--ord-accent) 8%, transparent);
 }
 
-.hook__btn::after { content: ' →'; }
+.hook__btn::after { content: '→'; }
+
+.hook__btn:active { background: color-mix(in srgb, var(--ord-accent) 18%, transparent); }
+
+@media (hover: hover) {
+  .hook__btn:hover { background: color-mix(in srgb, var(--ord-accent) 16%, transparent); }
+}
 
 .stats {
   display: grid;

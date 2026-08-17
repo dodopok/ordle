@@ -23,7 +23,7 @@ useHead({
   ],
 })
 
-const { state, keys, type, backspace, submit } = useOrdle()
+const { state, keys, type, backspace, submit, focusCell } = useOrdle()
 const storage = useOrdleStorage()
 
 // --- preferências --------------------------------------------------------
@@ -92,10 +92,12 @@ function openResult() {
         :guesses="state.guesses"
         :results="state.results"
         :current="state.current"
+        :cursor="state.cursor"
         :status="state.status"
         :shake="state.shake"
         :reveal="state.reveal"
         :win="state.win"
+        @select="focusCell"
       />
     </main>
 
@@ -138,6 +140,7 @@ function openResult() {
       :season="state.liturgicalSeason"
       :celebration="state.liturgicalCelebration"
       :color="state.liturgicalColor"
+      :psalm="state.liturgicalPsalm"
       :dark="dark"
       @close="state.modal = null"
     />

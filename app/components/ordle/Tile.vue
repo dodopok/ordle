@@ -8,7 +8,12 @@ const props = defineProps<{
   index: number
   revealing?: boolean
   bouncing?: boolean
+  /** na linha em digitação o quadrado é clicável: leva o cursor para ele */
+  interactive?: boolean
+  selected?: boolean
 }>()
+
+const emit = defineEmits<{ (e: 'select'): void }>()
 
 const LABEL: Record<Mark, string> = {
   correct: 'letra correta',
@@ -17,19 +22,71 @@ const LABEL: Record<Mark, string> = {
 }
 
 const ariaLabel = computed(() => {
+  const posicao = `posição ${props.index + 1}`
+  if (props.interactive) return props.letter ? `${posicao}, ${props.letter}` : `${posicao}, vazia`
   if (!props.letter) return 'vazio'
   if (!props.mark) return props.letter
   return `${props.letter}, ${LABEL[props.mark]}`
 })
+
+/**
+ * Roving tabindex: só o quadrado selecionado é tabulável, e o foco segue o
+ * cursor quando ele já está dentro da linha. Sem isso o foco do DOM e o cursor
+ * divergem — dá para ver dois quadrados marcados ao mesmo tempo, um pelo
+ * clique e outro pelo cursor.
+ */
+const btn = ref<HTMLButtonElement | null>(null)
+
+watch(
+  () => props.selected,
+  (selected) => {
+    if (!selected || !btn.value) return
+    const active = document.activeElement
+    // só rouba o foco se ele já estava num quadrado: nunca no load nem quando
+    // o jogador está usando o teclado da tela
+    if (active instanceof HTMLElement && active.classList.contains('tile--btn'))
+      btn.value.focus({ preventScroll: true })
+  },
+)
+
+const classes = computed(() => [
+  props.mark ? `is-${props.mark}` : props.letter ? 'is-filled' : '',
+  {
+    'is-revealing': props.revealing,
+    'is-bouncing': props.bouncing,
+    'is-selected': props.selected,
+  },
+])
 </script>
 
 <template>
+  <!--
+    Na linha em digitação o quadrado vira botão de verdade, para funcionar com
+    teclado e leitor de tela. Enter e espaço são barrados aqui porque o
+    tratador global da janela já cuida deles (Enter envia o palpite) — sem
+    isso, Enter com foco num quadrado enviaria e re-selecionaria o quadrado.
+  -->
+  <button
+    v-if="interactive"
+    ref="btn"
+    type="button"
+    class="tile tile--btn"
+    :class="classes"
+    :style="{ '--i': index }"
+    :aria-label="ariaLabel"
+    :aria-current="selected ? 'true' : undefined"
+    :tabindex="selected ? 0 : -1"
+    @click="emit('select')"
+    @keydown.enter.prevent
+    @keydown.space.prevent
+  >
+    <span class="tile__face">{{ letter }}</span>
+  </button>
+
   <div
+    v-else
     class="tile"
-    :class="[
-      mark ? `is-${mark}` : letter ? 'is-filled' : '',
-      { 'is-revealing': revealing, 'is-bouncing': bouncing },
-    ]"
+    :class="classes"
     :style="{ '--i': index }"
     role="img"
     :aria-label="ariaLabel"
@@ -56,9 +113,40 @@ const ariaLabel = computed(() => {
   user-select: none;
 }
 
+/* o botão precisa zerar o estilo próprio para virar tile */
+.tile--btn {
+  padding: 0;
+  margin: 0;
+  font-family: var(--ord-display);
+  cursor: pointer;
+  appearance: none;
+}
+
 .tile.is-filled {
   border-color: var(--ord-absent);
   animation: pop 100ms ease-out;
+}
+
+/*
+ * O cursor: borda na cor do dia e um filete embaixo. Não uso fundo colorido
+ * porque as três cores de feedback têm que continuar sendo as únicas coisas
+ * pintadas no tabuleiro.
+ */
+.tile.is-selected {
+  border-color: var(--ord-accent);
+  box-shadow: inset 0 -3px 0 var(--ord-accent);
+}
+
+/*
+ * Com o roving tabindex, o quadrado focado é sempre o selecionado — os dois
+ * indicadores coincidem em vez de brigar. O anel fica: sem ele, quem chega no
+ * tabuleiro pelo Tab não teria como saber que chegou.
+ */
+.tile--btn:focus { outline: none; }
+
+.tile--btn:focus-visible {
+  outline: 2px solid var(--ord-accent);
+  outline-offset: 2px;
 }
 
 .tile.is-correct { background: var(--ord-correct); border-color: var(--ord-correct); color: #fff; }

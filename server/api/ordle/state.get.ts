@@ -26,6 +26,7 @@ export default defineEventHandler(async (event) => {
     liturgicalColor: day.color,
     liturgicalSeason: day.season,
     liturgicalCelebration: day.celebration,
+    liturgicalPsalm: day.psalm ?? null,
     // a resposta só sai do servidor com a partida encerrada
     ...(s.status !== 'playing' && { answer: answer.word, definition: answer.definition }),
   }
