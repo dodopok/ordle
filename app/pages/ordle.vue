@@ -13,7 +13,13 @@ useHead({
       content:
         'Uma palavra litúrgica de 5 letras por dia, em 6 tentativas. No fim, a definição do termo — e o Ofício de hoje.',
     },
-    { name: 'theme-color', content: '#FBF9F4' },
+    // a barra do navegador acompanha o tema — sem isso, no escuro fica uma
+    // faixa clara em cima da tela
+    { name: 'theme-color', content: '#FBF9F4', media: '(prefers-color-scheme: light)' },
+    { name: 'theme-color', content: '#14130F', media: '(prefers-color-scheme: dark)' },
+    { name: 'mobile-web-app-capable', content: 'yes' },
+    { name: 'apple-mobile-web-app-status-bar-style', content: 'default' },
+    { name: 'apple-mobile-web-app-title', content: 'Ordle' },
   ],
 })
 
@@ -140,6 +146,7 @@ function openResult() {
 
 <style scoped>
 .ordle {
+  min-height: 100vh; /* fallback: iOS antigo não conhece dvh */
   min-height: 100dvh;
   display: grid;
   grid-template-rows: auto 1fr auto;
@@ -156,7 +163,9 @@ function openResult() {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.625rem 0.875rem;
+  /* o notch entra pela lateral quando o aparelho está deitado */
+  padding: 0.625rem max(0.875rem, env(safe-area-inset-right)) 0.625rem
+    max(0.875rem, env(safe-area-inset-left));
   max-width: 500px;
   margin: 0 auto;
   width: 100%;
@@ -189,14 +198,44 @@ function openResult() {
   background: none;
   font-size: 1.125rem;
   line-height: 1;
-  padding: 0.375rem 0.5rem;
+  /* 44px é o alvo de toque mínimo — antes eram ~30px, difíceis de acertar
+     com o polegar sem abrir o modal errado */
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
   border-radius: 4px;
   color: var(--ord-muted);
 }
 
-.hd__actions button:hover { color: var(--ord-ink); }
+/* no touch não existe hover: o feedback tem que vir do :active */
+.hd__actions button:active { color: var(--ord-ink); background: var(--ord-key); }
+
+@media (hover: hover) {
+  .hd__actions button:hover { color: var(--ord-ink); }
+}
 
 .main { display: grid; align-content: center; min-height: 0; }
+
+/* celular deitado: tabuleiro à esquerda, teclado à direita */
+@media (orientation: landscape) and (max-height: 560px) {
+  .ordle {
+    grid-template-columns: 1fr minmax(0, 26rem);
+    grid-template-rows: auto 1fr;
+  }
+
+  .hd { grid-column: 1 / -1; }
+
+  .main { padding-left: env(safe-area-inset-left); }
+
+  .ordle :deep(.kb) {
+    align-self: center;
+    padding-right: max(0.5rem, env(safe-area-inset-right));
+  }
+
+  .toast { top: 3.5rem; }
+}
 
 .toast {
   position: fixed;

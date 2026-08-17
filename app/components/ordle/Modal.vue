@@ -13,9 +13,16 @@ function onKey(e: KeyboardEvent) {
 
 onMounted(() => {
   document.addEventListener('keydown', onKey, true)
+  // trava o fundo: sem isso, rolar o modal no iOS arrasta a página atrás e o
+  // tabuleiro fica torto quando o modal fecha
+  document.body.style.overflow = 'hidden'
   nextTick(() => panel.value?.focus())
 })
-onBeforeUnmount(() => document.removeEventListener('keydown', onKey, true))
+
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', onKey, true)
+  document.body.style.overflow = ''
+})
 </script>
 
 <template>
@@ -48,15 +55,20 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey, true))
   z-index: 50;
   display: grid;
   place-items: center;
-  padding: 1rem;
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
   background: color-mix(in srgb, var(--ord-ink) 45%, transparent);
   animation: fade 160ms ease;
 }
 
 .modal__panel {
   width: min(28rem, 100%);
-  max-height: 88vh;
+  max-height: 88vh; /* fallback: iOS antigo não conhece dvh */
+  max-height: min(88dvh, 100%);
   overflow-y: auto;
+  /* rolar dentro do modal não pode arrastar a página atrás */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   background: var(--ord-surface);
   border: 1px solid var(--ord-rule);
   border-top: 3px solid var(--ord-accent);
