@@ -133,7 +133,7 @@ async function share() {
     results: props.results,
     status: props.status,
     dark: props.dark,
-    url: import.meta.client ? `${location.origin}/ordle` : undefined,
+    url: import.meta.client ? location.origin : undefined,
   })
   try {
     if (import.meta.client && navigator.share) {

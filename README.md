@@ -13,7 +13,7 @@ Nuxt 4 (`app/` para o client, `server/` para o Nitro).
 
 ```sh
 npm install
-npm run dev            # http://localhost:3000/ordle
+npm run dev            # http://localhost:3000
 ```
 
 Em produção, `ORDLE_SECRET` é obrigatório (o servidor se recusa a subir sem
@@ -39,6 +39,13 @@ Settings → Environment Variables, nos três ambientes:
 Sem `ORDLE_SECRET` o servidor devolve 500 em vez de assinar com a chave de dev,
 que é pública — ver "fail-closed" abaixo.
 
+**Analytics**: `@vercel/analytics/nuxt` está nos módulos. É sem cookie e sem
+identificador de usuário, então não pede banner de consentimento. Só coleta
+rodando na Vercel — em dev e num `node .output/server/index.mjs` o script é
+injetado mas o endpoint `/_vercel/insights/script.js` dá 404, o que é esperado:
+quem serve esse caminho é a borda da Vercel. Ative Analytics no painel do
+projeto, senão o script carrega e nada é registrado.
+
 Duas coisas guardam estado em memória do processo e, em serverless, valem por
 instância: o **rate limit** (30 req/min vira 30 por lambda — na prática mais
 frouxo) e o **cache da cor litúrgica** (cada instância nova paga um round-trip).
@@ -56,6 +63,14 @@ troque o Map por Vercel KV.
 | `npm run dictionary` | regenera `server/utils/pt-5.json` a partir do Hunspell pt_BR |
 
 ## Como funciona
+
+**O jogo mora na raiz.** `/ordle` foi a URL canônica durante o
+desenvolvimento e continua respondendo, com 301 para `/` — encaminhar custa
+nada e evita 404 em link que já tenha circulado. A raiz ser a URL compartilhada
+é o motivo de as tags Open Graph existirem: o crawler de preview do WhatsApp
+não executa JavaScript, então elas precisam estar no HTML que o servidor
+entrega. Estão, mesmo com a página em `ssr: false`, porque o Nuxt monta o head
+no shell — conferido no HTML cru do build.
 
 **A resposta nunca sai do servidor** até a partida acabar. `server/utils/words.ts`
 não pode ser importado por nada dentro de `app/` — se entrar no bundle do
@@ -75,10 +90,17 @@ qualquer um forja um cookie com `status: 'won'`, então ela só vale quando
 `preview` ou qualquer outra coisa estoura na hora de assinar em vez de cair no
 atalho. O `secure` do cookie segue a mesma regra.
 
-**A palavra do dia é determinística.** `gameNumber` conta dias desde 2026-01-01
-em `America/Sao_Paulo`, e indexa uma permutação da lista embaralhada com seed
-fixa (`server/utils/ordle.ts`). Sem estado, sem banco, e o dia seguinte nunca é
-pré-carregado.
+**A palavra do dia é determinística.** `gameNumber` conta dias desde `LAUNCH`
+em `America/Sao_Paulo` — contagem 1-based, o dia da estreia é o #1 — e indexa
+uma permutação da lista embaralhada com seed fixa (`server/utils/ordle.ts`).
+Sem estado, sem banco, e o dia seguinte nunca é pré-carregado.
+
+**`LAUNCH` não se mexe com o jogo no ar.** Essa constante numera os dias *e*
+indexa a resposta. Mudá-la depois da estreia renumera todo mundo (o "#142" que
+as pessoas compartilharam passa a apontar para outro dia) e troca a palavra no
+meio do dia, invalidando as partidas em andamento — os palpites já dados foram
+coloridos contra a palavra antiga. Há teste fixando que o #1 é CREDO,
+justamente para essa mudança cair no CI e não em produção.
 
 **Dá para preencher fora de ordem.** Tocar num quadrado leva o cursor para
 aquela posição, e a letra entra ali. Por isso a linha em digitação é um array

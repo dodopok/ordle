@@ -5,18 +5,32 @@ export type Mark = 'correct' | 'present' | 'absent'
 export const WORD_LENGTH = 5
 export const MAX_ATTEMPTS = 6
 
-const EPOCH = Date.UTC(2026, 0, 1) // dia 0 do jogo
+/**
+ * Dia 1 do jogo — a data de lançamento, não um marco arbitrário.
+ *
+ * ⚠️  NÃO MEXA NISTO COM O JOGO NO AR. Esta constante faz duas coisas ao mesmo
+ *     tempo: numera os dias e indexa a palavra do dia. Mudá-la depois do
+ *     lançamento renumera todo mundo (o "#142" que as pessoas compartilharam
+ *     passa a apontar para outro dia) e ainda troca a resposta no meio do dia,
+ *     invalidando as partidas em andamento — os palpites já dados foram
+ *     coloridos contra a palavra antiga.
+ */
+const LAUNCH = Date.UTC(2026, 7, 17)
 const TZ_OFFSET_MS = -3 * 60 * 60 * 1000 // America/Sao_Paulo
 const DAY_MS = 86_400_000
 
 /**
+ * Contagem 1-based: o dia do lançamento é o #1, não o #0. É número que aparece
+ * no header e no texto de compartilhamento, então começa onde uma pessoa
+ * espera que comece.
+ *
  * Se o horário de verão voltar, troque o offset fixo por
  * `Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' })` formatando
  * a data direto. Para agora, offset fixo é suficiente e mais barato.
  */
 export function gameNumber(now: number = Date.now()): number {
   const local = now + TZ_OFFSET_MS
-  return Math.floor((local - EPOCH) / DAY_MS)
+  return Math.floor((local - LAUNCH) / DAY_MS) + 1
 }
 
 export function gameId(now: number = Date.now()): string {
