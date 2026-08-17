@@ -81,25 +81,38 @@ dia é impossível de digitar.
 alimenta o Ordo:
 
 ```
-GET https://api.caminhoanglicano.com.br/api/v1/calendar/:ano/:mes/:dia
+GET /api/v1/calendar/:ano/:mes/:dia?preferences[prayer_book_code]=loc_2015
+    header X-App-Internal-Id: <chave>
 ```
 
-A API exige verificação de app: sem credencial devolve 401
-`APP_VERIFICATION_REQUIRED`. Passe a chave em `ORDLE_LITURGY_KEY` (e o nome do
-header em `ORDLE_LITURGY_HEADER`, se não for `X-App-Identifier`). Nunca
-hardcode a chave.
+Os dois são obrigatórios: sem o header vem 401 `APP_VERIFICATION_REQUIRED`, sem
+o prayer book vem `PRAYER_BOOK_REQUIRED`. A chave sai de `ORDLE_LITURGY_KEY`
+(veja `.env.example`); header e prayer book têm override próprio, mas o padrão
+já é o certo.
 
-Timeout de 1,5s, cache de uma hora com stale-while-revalidate — entrada vencida
+Timeout de 2,5s (medido: ~725ms na primeira chamada, 125–160ms quente, 30 KiB
+de payload), cache de uma hora com stale-while-revalidate — entrada vencida
 responde na hora e revalida em segundo plano, então só a primeira chamada de
 cada instância paga o round-trip. Qualquer falha (401, rede fora, timeout, cor
 irreconhecível) cai no cálculo local: computus gregoriano + estações +
-Gaudete/Laetare + as festas fixas que valem desvio de cor. O jogo nunca quebra —
-nem atrasa — por causa de um filete colorido.
+Gaudete/Laetare + as festas fixas que valem desvio de cor.
 
-`extractDay()` é tolerante com o formato do payload (`color` ou
-`liturgical_color`, celebração como string ou objeto, invólucro `data`/`calendar`)
-e tem teste próprio. Se a resposta real não bater com nenhuma das formas
-previstas, é lá que se ajusta.
+### Duas sutilezas do calendário
+
+`extractDay()` faz o parsing separado da rede, e tem teste com recortes de
+payloads reais para cada uma:
+
+**A cor do dia é `liturgical_color`, no topo — nunca `celebration.color`.** Em
+13/12/2026 a celebração é Luzia (`vermelho`), mas o dia é o Domingo Gaudete e
+sai `rosa`. Ler a cor da celebração pintaria o header de vermelho no meio do
+Advento.
+
+**A celebração nem sempre nomeia o dia.** Ela só vale como rótulo quando a cor
+dela bate com a do dia — festa que cede ao domingo vem com cor divergente. Em
+18/10/2026 vem Lucas (`branco`) num domingo do Tempo Comum (`verde`): quem
+nomeia é o `sunday_name`. Já em 01/11/2026, Todos os Santos (`branco`) bate com
+o dia e vence o domingo, como manda a precedência de festa principal. O
+fallback local reproduz essa precedência com uma flag por festa fixa.
 
 ## Antifraude
 

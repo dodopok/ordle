@@ -235,6 +235,15 @@ describe('calendário litúrgico (fallback local)', () => {
     expect(computeLiturgicalDay('2026-08-17').color).toBe('green')
   })
 
+  it('festa de apóstolo cede ao domingo, festa principal não', () => {
+    // conferido contra a API: 18/10/2026 (Lucas, domingo) devolve verde,
+    // e 01/11/2026 (Todos os Santos, domingo) devolve branco
+    expect(computeLiturgicalDay('2026-10-18').color).toBe('green')
+    expect(computeLiturgicalDay('2026-11-01').color).toBe('white')
+    // fora do domingo, a festa de apóstolo pinta normalmente
+    expect(computeLiturgicalDay('2026-06-29').color).toBe('red')
+  })
+
   it('traduz as cores da API', () => {
     expect(parseColor('verde')).toBe('green')
     expect(parseColor('Roxo')).toBe('purple')
@@ -244,40 +253,124 @@ describe('calendário litúrgico (fallback local)', () => {
   })
 })
 
-describe('extractDay (payload do Caminho Anglicano)', () => {
-  const DIA = '2026-08-17'
-
-  it('lê a forma plana', () => {
-    expect(
-      extractDay({ color: 'verde', season: 'Tempo Comum', description: ['Próprio 15'] }, DIA),
-    ).toEqual({ color: 'green', season: 'Tempo Comum', celebration: 'Próprio 15' })
-  })
-
-  it('desembrulha data/calendar', () => {
-    const day = extractDay({ data: { calendar: { color: 'roxo', season: 'Advento' } } }, DIA)
-    expect(day?.color).toBe('purple')
-    expect(day?.season).toBe('Advento')
-  })
-
-  it('aceita celebração como objeto', () => {
+/**
+ * Os payloads abaixo são recortes de respostas reais de
+ * GET /api/v1/calendar/:ano/:mes/:dia?preferences[prayer_book_code]=loc_2015
+ * (só os campos que o Ordle lê; readings e collect foram descartados).
+ */
+describe('extractDay (payload real do Caminho Anglicano)', () => {
+  it('féria: sem celebração e sem domingo, cai em Féria', () => {
     const day = extractDay(
-      { liturgical_color: 'vermelho', celebration: { name: 'São Lucas' } },
-      DIA,
+      {
+        liturgical_season: 'Tempo Comum',
+        liturgical_color: 'verde',
+        celebration: null,
+        sunday_name: null,
+        description: ['Próprio 15', '20ª Semana do Tempo Comum'],
+      },
+      '2026-08-17',
     )
-    expect(day).toMatchObject({ color: 'red', celebration: 'São Lucas' })
+    expect(day).toEqual({ color: 'green', season: 'Tempo Comum', celebration: 'Féria' })
   })
 
-  it('completa season e celebração com o cálculo local', () => {
-    const day = extractDay({ color: 'branco' }, DIA)
-    expect(day).toEqual({ color: 'white', season: 'Tempo Comum', celebration: 'Féria' })
+  it('domingo comum: nomeia pelo sunday_name', () => {
+    const day = extractDay(
+      {
+        liturgical_season: 'Tempo Comum',
+        liturgical_color: 'verde',
+        celebration: null,
+        sunday_name: '12º Domingo no Tempo Comum',
+      },
+      '2026-08-23',
+    )
+    expect(day?.celebration).toBe('12º Domingo no Tempo Comum')
+  })
+
+  it('festa que rege o dia vence o domingo (Todos os Santos)', () => {
+    const day = extractDay(
+      {
+        liturgical_season: 'Tempo Comum',
+        liturgical_color: 'branco',
+        celebration: { name: 'Todos os Santos e Santas', color: 'branco', type: 'principal_feast' },
+        sunday_name: '22º Domingo no Tempo Comum',
+      },
+      '2026-11-01',
+    )
+    expect(day).toEqual({
+      color: 'white',
+      season: 'Tempo Comum',
+      celebration: 'Todos os Santos e Santas',
+    })
+  })
+
+  it('festa que cede ao domingo não nomeia o dia (Lucas em domingo comum)', () => {
+    // celebration.color branco ≠ liturgical_color verde: quem rege é o domingo
+    const day = extractDay(
+      {
+        liturgical_season: 'Tempo Comum',
+        liturgical_color: 'verde',
+        celebration: { name: 'Lucas', color: 'branco', type: 'festival' },
+        sunday_name: '20º Domingo no Tempo Comum',
+      },
+      '2026-10-18',
+    )
+    expect(day).toEqual({
+      color: 'green',
+      season: 'Tempo Comum',
+      celebration: '20º Domingo no Tempo Comum',
+    })
+  })
+
+  it('Gaudete: a cor sai do dia, não da celebração', () => {
+    // o dia é rosa; Luzia, memória do dia, é vermelha. Ler celebration.color
+    // pintaria o header de vermelho no meio do Advento
+    const day = extractDay(
+      {
+        liturgical_season: 'Advento',
+        liturgical_color: 'rosa',
+        celebration: { name: 'Luzia', color: 'vermelho', type: 'lesser_feast' },
+        sunday_name: '3º Domingo do Advento',
+      },
+      '2026-12-13',
+    )
+    expect(day).toEqual({
+      color: 'rose',
+      season: 'Advento',
+      celebration: '3º Domingo do Advento',
+    })
+  })
+
+  it('Sexta-feira da Paixão', () => {
+    const day = extractDay(
+      {
+        liturgical_season: 'Quaresma',
+        liturgical_color: 'vermelho',
+        celebration: { name: 'Sexta-Feira da Paixão', color: 'vermelho', type: 'major_holy_day' },
+        sunday_name: null,
+      },
+      '2026-04-03',
+    )
+    expect(day).toEqual({
+      color: 'red',
+      season: 'Quaresma',
+      celebration: 'Sexta-Feira da Paixão',
+    })
   })
 
   it('devolve null quando a cor não dá para reconhecer', () => {
     // melhor cair no cálculo local do que pintar o header de uma cor errada
-    expect(extractDay({ season: 'Tempo Comum' }, DIA)).toBeNull()
-    expect(extractDay({ color: 'turquesa' }, DIA)).toBeNull()
-    expect(extractDay({ error: 'Unauthorized access' }, DIA)).toBeNull()
-    expect(extractDay(null, DIA)).toBeNull()
-    expect(extractDay([1, 2, 3], DIA)).toBeNull()
+    expect(extractDay({ liturgical_season: 'Tempo Comum' }, '2026-08-17')).toBeNull()
+    expect(extractDay({ liturgical_color: 'turquesa' }, '2026-08-17')).toBeNull()
+    expect(extractDay(null, '2026-08-17')).toBeNull()
+    expect(extractDay([1, 2, 3], '2026-08-17')).toBeNull()
+  })
+
+  it('devolve null nos erros da própria API', () => {
+    expect(
+      extractDay({ error: { code: 'APP_VERIFICATION_REQUIRED' }, success: false }, '2026-08-17'),
+    ).toBeNull()
+    expect(
+      extractDay({ success: false, error: { code: 'PRAYER_BOOK_REQUIRED' } }, '2026-08-17'),
+    ).toBeNull()
   })
 })

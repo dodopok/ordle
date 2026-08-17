@@ -13,17 +13,21 @@ export type LiturgicalDay = {
  *
  *   GET https://api.caminhoanglicano.com.br/api/v1/calendar/:ano/:mes/:dia
  *
- * A API exige verificação de app: sem credencial ela responde 401 com
- * `APP_VERIFICATION_REQUIRED`. O header e o valor vêm de `ORDLE_LITURGY_KEY`
- * (e `ORDLE_LITURGY_HEADER`, se não for o padrão) — nunca hardcode a chave.
+ * Dois requisitos da API, os dois retornando erro se faltarem:
+ * - verificação de app: header `X-App-Internal-Id`, senão 401
+ *   `APP_VERIFICATION_REQUIRED`. Valor em `ORDLE_LITURGY_KEY` — nunca
+ *   hardcode a chave.
+ * - `preferences[prayer_book_code]` na query, senão `PRAYER_BOOK_REQUIRED`.
  *
  * Tudo isso é opcional de propósito: sem chave, com erro, com 401 ou com
  * timeout, caímos no cálculo local. O jogo nunca deve quebrar — nem atrasar —
  * por causa de um filete colorido no header.
  */
 const API_BASE = 'https://api.caminhoanglicano.com.br/api/v1/calendar'
-const DEFAULT_HEADER = 'X-App-Identifier'
-const API_TIMEOUT_MS = 1500
+const DEFAULT_HEADER = 'X-App-Internal-Id'
+const DEFAULT_PRAYER_BOOK = 'loc_2015'
+// medido: ~725ms na primeira chamada, 125-160ms quente, 30 KiB de payload
+const API_TIMEOUT_MS = 2500
 const CACHE_TTL_MS = 60 * 60 * 1000
 
 const cache = new Map<string, { at: number; day: LiturgicalDay }>()
@@ -54,7 +58,7 @@ export function parseColor(raw: unknown): LiturgicalColor | null {
 /**
  * Stale-while-revalidate: entrada fresca responde na hora; entrada vencida
  * responde na hora e revalida em segundo plano. Só a primeira chamada da
- * instância paga o round-trip até a API — e mesmo essa tem timeout de 1,5s.
+ * instância paga o round-trip até a API — e mesmo essa tem timeout curto.
  */
 export async function liturgicalDay(gameId: string): Promise<LiturgicalDay> {
   const hit = cache.get(gameId)
@@ -71,58 +75,49 @@ async function refresh(gameId: string): Promise<LiturgicalDay> {
   return day
 }
 
-/** Desembrulha os invólucros que a API pode usar em volta do dia. */
-function unwrap(payload: unknown): Record<string, unknown> | null {
-  let node: unknown = payload
-  for (const key of ['data', 'calendar', 'day', 'liturgical_day']) {
-    if (node && typeof node === 'object' && key in (node as Record<string, unknown>))
-      node = (node as Record<string, unknown>)[key]
-  }
-  return node && typeof node === 'object' && !Array.isArray(node)
-    ? (node as Record<string, unknown>)
-    : null
-}
+const asRecord = (v: unknown): Record<string, unknown> | null =>
+  v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null
 
-const firstString = (...candidates: unknown[]): string | null => {
-  for (const c of candidates) {
-    if (typeof c === 'string' && c.trim()) return c.trim()
-    if (Array.isArray(c) && typeof c[0] === 'string' && c[0].trim()) return c[0].trim()
-    if (c && typeof c === 'object') {
-      const o = c as Record<string, unknown>
-      for (const k of ['name', 'title', 'label']) if (typeof o[k] === 'string') return o[k] as string
-    }
-  }
-  return null
-}
+const trimmed = (v: unknown): string | null =>
+  typeof v === 'string' && v.trim() ? v.trim() : null
 
 /**
  * Extrai o dia litúrgico do payload da API.
  *
- * Tolerante de propósito: aceita `color`/`liturgical_color`, celebração como
- * string ou objeto com `name`/`title`, e `description` como array. Se a cor
- * não vier reconhecível, devolve null e o chamador cai no cálculo local —
- * uma cor errada é pior que a cor calculada aqui.
+ * Duas sutilezas do calendário, as duas verificadas contra respostas reais:
+ *
+ * 1. A cor do dia é `liturgical_color`, no topo — NUNCA `celebration.color`.
+ *    Em 13/12/2026 a celebração é Luzia (`vermelho`), mas o dia é o Domingo
+ *    Gaudete e sai `rosa`. Ler a cor da celebração pintaria o header errado.
+ *
+ * 2. A celebração nem sempre é o nome do dia. Só vale como rótulo quando a cor
+ *    dela bate com a do dia, isto é, quando ela é que rege — festa que cede ao
+ *    domingo vem com cor divergente. Em 18/10/2026 vem Lucas (`branco`) num
+ *    domingo do Tempo Comum (`verde`): quem nomeia o dia é o `sunday_name`.
+ *    Já em 01/11/2026 Todos os Santos (`branco`) bate com o dia e vence o
+ *    domingo, como manda a precedência de festa principal.
+ *
+ * Se a cor não vier reconhecível, devolve null e o chamador cai no cálculo
+ * local — uma cor errada é pior que a cor calculada aqui.
  */
 export function extractDay(payload: unknown, gameId: string): LiturgicalDay | null {
-  const node = unwrap(payload)
+  const node = asRecord(payload)
   if (!node) return null
 
-  const color =
-    parseColor(node.color) ?? parseColor(node.liturgical_color) ?? parseColor(node.colour)
+  const color = parseColor(node.liturgical_color) ?? parseColor(node.color)
   if (!color) return null
 
+  const celebration = asRecord(node.celebration)
+  const drivesTheDay = celebration && parseColor(celebration.color) === color
   const fallback = computeLiturgicalDay(gameId)
+
   return {
     color,
-    season: firstString(node.season, node.liturgical_season, node.season_name) ?? fallback.season,
+    season: trimmed(node.liturgical_season) ?? trimmed(node.season) ?? fallback.season,
     celebration:
-      firstString(
-        node.celebration,
-        node.celebration_name,
-        node.title,
-        node.name,
-        node.description,
-      ) ?? fallback.celebration,
+      (drivesTheDay ? trimmed(celebration.name) : null) ??
+      trimmed(node.sunday_name) ??
+      fallback.celebration,
   }
 }
 
@@ -132,10 +127,12 @@ async function fromApi(gameId: string): Promise<LiturgicalDay | null> {
 
   const [year, month, day] = gameId.split('-').map(Number)
   const header = process.env.ORDLE_LITURGY_HEADER || DEFAULT_HEADER
+  const prayerBook = process.env.ORDLE_LITURGY_PRAYER_BOOK || DEFAULT_PRAYER_BOOK
 
   try {
     const res = await $fetch(`${API_BASE}/${year}/${month}/${day}`, {
       headers: { [header]: key, Accept: 'application/json' },
+      query: { 'preferences[prayer_book_code]': prayerBook },
       timeout: API_TIMEOUT_MS,
       retry: 0,
     })
@@ -208,20 +205,26 @@ export function computeLiturgicalDay(gameId: string): LiturgicalDay {
     celebration: label,
   })
 
-  // festas fixas que valem o desvio de cor
-  const fixed: Record<string, LiturgicalDay> = {
-    '01-01': day('Santa Maria, Mãe de Deus', 'white', 'Natal'),
-    '01-06': day('Epifania do Senhor', 'white', 'Epifania'),
-    '06-29': day('São Pedro e São Paulo', 'red', 'Tempo Comum'),
-    '07-25': day('São Tiago, Apóstolo', 'red', 'Tempo Comum'),
-    '10-18': day('São Lucas, Evangelista', 'red', 'Tempo Comum'),
-    '10-28': day('São Simão e São Judas', 'red', 'Tempo Comum'),
-    '11-01': day('Todos os Santos', 'white', 'Tempo Comum'),
-    '11-30': day('Santo André, Apóstolo', 'red', 'Advento'),
-    '12-25': day('Natal do Senhor', 'white', 'Natal'),
-    '12-26': day('Santo Estêvão, Protomártir', 'red', 'Natal'),
+  /**
+   * Festas fixas que valem o desvio de cor. `cedeAoDomingo` reproduz a
+   * precedência que a API mostra: festa principal (Todos os Santos, Natal)
+   * vence o domingo; festa de apóstolo cede a ele — em 18/10/2026 a API
+   * devolve verde, não vermelho, porque Lucas caiu num domingo.
+   */
+  const fixed: Record<string, [LiturgicalDay, cedeAoDomingo?: boolean]> = {
+    '01-01': [day('Santa Maria, Mãe de Deus', 'white', 'Natal')],
+    '01-06': [day('Epifania do Senhor', 'white', 'Epifania')],
+    '06-29': [day('São Pedro e São Paulo', 'red', 'Tempo Comum'), true],
+    '07-25': [day('São Tiago, Apóstolo', 'red', 'Tempo Comum'), true],
+    '10-18': [day('São Lucas, Evangelista', 'red', 'Tempo Comum'), true],
+    '10-28': [day('São Simão e São Judas', 'red', 'Tempo Comum'), true],
+    '11-01': [day('Todos os Santos', 'white', 'Tempo Comum')],
+    '11-30': [day('Santo André, Apóstolo', 'red', 'Advento'), true],
+    '12-25': [day('Natal do Senhor', 'white', 'Natal')],
+    '12-26': [day('Santo Estêvão, Protomártir', 'red', 'Natal'), true],
   }
-  if (fixed[md]) return fixed[md]
+  const feast = fixed[md]
+  if (feast && !(feast[1] && isSunday)) return feast[0]
 
   // Tríduo e Semana Santa
   if (t === palmSunday) return day('Domingo de Ramos', 'red', 'Quaresma')
