@@ -8,6 +8,14 @@ import {
 } from '../../utils/ordle-shared'
 import type { Stats } from '../../composables/useOrdleStorage'
 
+const COLOR_PT: Record<string, string> = {
+  green: 'verde',
+  purple: 'roxo',
+  red: 'vermelho',
+  white: 'branco',
+  rose: 'rosa',
+}
+
 const props = defineProps<{
   gameNumber: number
   status: GameStatus
@@ -24,11 +32,17 @@ const props = defineProps<{
 }>()
 
 /**
- * A oferta. Com o salmo do dia ela é concreta e verificável; sem ele sobra a
- * versão genérica, que converte pior mas nunca some.
+ * A oferta, composta como verbete e não como frase: sob a rubrica "hoje no
+ * Ordo", "Salmo 130" diz mais — e mais rápido — que "o Ofício de hoje traz o
+ * Salmo 130". Sem o salmo sobra o nome do produto, que ainda é honesto.
  */
-const hookLine = computed(() =>
-  props.psalm ? `O Ofício de hoje traz o ${props.psalm}.` : 'O Ofício de hoje já está no Ordo.',
+const hookEntry = computed(() => props.psalm ?? 'Ofício Diário')
+
+/** os dados do dia, em lista separada por ponto medial, como legenda de missal */
+const hookDay = computed(() =>
+  [props.celebration, props.season, COLOR_PT[props.color] ?? props.color]
+    .filter(Boolean)
+    .join(' · '),
 )
 
 /**
@@ -89,14 +103,6 @@ const ordoLabel = computed(() =>
 )
 
 const emit = defineEmits<{ (e: 'close'): void }>()
-
-const COLOR_PT: Record<string, string> = {
-  green: 'verde',
-  purple: 'roxo',
-  red: 'vermelho',
-  white: 'branco',
-  rose: 'rosa',
-}
 
 const shared = ref(false)
 const toast = ref('')
@@ -159,20 +165,22 @@ async function share() {
     <!--
       3: o gancho para o Ordo.
 
-      Continua sendo uma linha, sem banner — interstício converte pior num jogo
-      diário. O que melhora a conversão aqui é a especificidade: dizer o que o
-      Ofício traz HOJE prova que o app tem conteúdo, coisa que "baixe nosso
-      aplicativo" não faz. Por isso o salmo do dia entra quando a API o traz.
+      Sem banner e sem caixa de aviso — interstício converte pior num jogo
+      diário, e caixa arredondada com barra colorida é o componente que todo
+      gerador de layout cospe. Aqui o bloco é composto como entrada de missal:
+      filete, rubrica em versalete na cor do dia, verbete em serifa e uma
+      linha de índice para abrir.
+
+      A especificidade é o que faz a propaganda funcionar: "Salmo 130" prova
+      que o app tem conteúdo, coisa que "baixe nosso aplicativo" não faz.
     -->
     <aside class="hook">
-      <p class="hook__day">
-        <span class="swatch" aria-hidden="true" />
-        Hoje é <strong>{{ celebration }}</strong> — {{ season }}, cor
-        {{ COLOR_PT[color] ?? color }}.
-      </p>
-      <p class="hook__line">{{ hookLine }}</p>
-      <a class="hook__btn" :href="ordoUrl" target="_blank" rel="noopener">
-        {{ ordoLabel }}
+      <p class="hook__label">Hoje no Ordo</p>
+      <p class="hook__entry">{{ hookEntry }}</p>
+      <p class="hook__day">{{ hookDay }}</p>
+      <a class="hook__go" :href="ordoUrl" target="_blank" rel="noopener">
+        <span>{{ ordoLabel }}</span>
+        <span class="hook__go-arrow" aria-hidden="true">→</span>
       </a>
     </aside>
 
@@ -231,70 +239,69 @@ async function share() {
   font-size: 0.9375rem;
 }
 
+/*
+ * Sem caixa arredondada e sem botão de fundo tingido: esse par é o que faz a
+ * seção parecer template genérico. O bloco vira uma entrada tipográfica —
+ * filete em cima, rubrica em versalete na cor do dia (como rubrica impressa),
+ * verbete em serifa e uma linha de índice para abrir.
+ */
 .hook {
-  border: 1px solid var(--ord-rule);
-  border-left: 3px solid var(--ord-accent);
-  border-radius: 6px;
-  padding: 0.75rem 0.875rem;
-  margin-bottom: 1.25rem;
+  margin: 0 0 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--ord-rule);
 }
 
-/* a linha do dia é contexto: menor e discreta */
-.hook__day {
-  margin: 0 0 0.25rem;
-  font-size: 0.75rem;
-  line-height: 1.5;
-  color: var(--ord-muted);
-  letter-spacing: 0.01em;
+.hook__label {
+  margin: 0 0 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ord-accent);
 }
 
-.hook__day strong { color: var(--ord-ink); font-weight: 600; }
-
-/* a linha do salmo é a oferta: é ela que tem que ser lida */
-.hook__line {
-  margin: 0 0 0.75rem;
+.hook__entry {
+  margin: 0;
   font-family: var(--ord-display);
-  font-size: 1.0625rem;
-  line-height: 1.35;
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.15;
 }
 
-.swatch {
-  display: inline-block;
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  background: var(--ord-accent);
-  border: 1px solid var(--ord-rule);
-  margin-right: 0.25rem;
+.hook__day {
+  margin: 0.1875rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--ord-muted);
 }
 
 /*
- * Botão de verdade, não link de texto: é a única ação da tela além de
- * compartilhar, e um alvo de 44px acerta com o polegar. Continua sendo uma
- * linha dentro do bloco — não vira banner.
+ * Linha de índice: hairline em cima, rótulo à esquerda, seta à direita. Lê
+ * como sumário de livro impresso e continua sendo alvo de 44px — um link de
+ * texto solto seria discreto demais para a única ação que leva ao app.
  */
-.hook__btn {
-  display: block;
-  min-height: 2.75rem;
+.hook__go {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.375rem;
-  border: 1px solid var(--ord-accent);
-  border-radius: 6px;
-  font-size: 0.875rem;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.875rem;
+  padding: 0.75rem 0;
+  min-height: 2.75rem;
+  border-top: 1px solid var(--ord-rule);
+  font-size: 0.9375rem;
   font-weight: 600;
   text-decoration: none;
-  color: var(--ord-accent);
-  background: color-mix(in srgb, var(--ord-accent) 8%, transparent);
+  color: var(--ord-ink);
 }
 
-.hook__btn::after { content: '→'; }
+.hook__go-arrow { color: var(--ord-accent); }
 
-.hook__btn:active { background: color-mix(in srgb, var(--ord-accent) 18%, transparent); }
+.hook__go:active { color: var(--ord-accent); }
 
 @media (hover: hover) {
-  .hook__btn:hover { background: color-mix(in srgb, var(--ord-accent) 16%, transparent); }
+  .hook__go:hover { color: var(--ord-accent); }
 }
 
 .stats {

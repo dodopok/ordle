@@ -63,12 +63,25 @@
   :root { --ord-chrome: 6.5rem; }
 }
 
-/* cor do dia — só no filete e no número do jogo, nunca nos tiles */
+/* cor do dia — filete, número do jogo e a rubrica do modal, nunca os tiles */
 [data-color='green'] { --ord-accent: #3e6b4f; }
 [data-color='purple'] { --ord-accent: #5b4275; }
 [data-color='red'] { --ord-accent: #9b2c2c; }
 [data-color='white'] { --ord-accent: #b08d3f; }
 [data-color='rose'] { --ord-accent: #c2748f; }
+
+/*
+ * No escuro as mesmas cores viram texto ilegível: #5b4275 sobre #14130f é
+ * roxo escuro sobre quase-preto. Como a cor do dia agora também pinta texto
+ * pequeno (o número do jogo e a rubrica do modal), cada uma ganha uma versão
+ * clara. Os dois atributos ficam no mesmo elemento, então o seletor composto
+ * vence o de cima por especificidade.
+ */
+[data-theme='dark'][data-color='green'] { --ord-accent: #6aa07d; }
+[data-theme='dark'][data-color='purple'] { --ord-accent: #a98fd0; }
+[data-theme='dark'][data-color='red'] { --ord-accent: #d9736f; }
+[data-theme='dark'][data-color='white'] { --ord-accent: #d9b45e; }
+[data-theme='dark'][data-color='rose'] { --ord-accent: #e3a0b6; }
 
 [data-theme='dark'] {
   --ord-bg: #14130f;

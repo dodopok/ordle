@@ -131,10 +131,13 @@ link de WhatsApp aberto no celular, então:
 - Alvos de toque de 44px, feedback no `:active` (no touch não existe hover),
   `env(safe-area-inset-*)` no header, no teclado e no modal.
 
-**A cor do dia é o único acento variável.** O filete de 3px no header e o número
-do jogo saem na cor litúrgica de hoje — roxo na Quaresma, rosa no Gaudete,
-vermelho em mártires. As três cores de feedback (verde/ouro/cinza) são fixas: a
-leitura precisa ser aprendida uma vez e valer sempre.
+**A cor do dia é o único acento variável.** O filete de 3px no header, o número
+do jogo e a rubrica do modal saem na cor litúrgica de hoje — roxo na Quaresma,
+rosa no Gaudete, vermelho em mártires. As três cores de feedback
+(verde/ouro/cinza) são fixas: a leitura precisa ser aprendida uma vez e valer
+sempre. No tema escuro cada cor tem uma versão clara própria: as de tema claro
+viram texto ilegível sobre o fundo quase preto, e a cor agora pinta texto
+pequeno, não só filete.
 
 ## Duas listas de palavras
 
@@ -196,9 +199,13 @@ linha, sem banner — interstício converte pior num jogo diário. Então o que
 melhora aqui é **especificidade**, não tamanho:
 
 - a linha de contexto (celebração, tempo, cor) fica pequena e discreta;
-- a oferta é concreta — "O Ofício de hoje traz o Salmo 130", com o salmo vindo
-  da API. Dizer o que o Ofício traz hoje prova que o app tem conteúdo, coisa
-  que "baixe nosso aplicativo" não faz. Sem o salmo, cai numa frase genérica;
+- a oferta é concreta — sob a rubrica "hoje no Ordo", o verbete é o salmo do
+  dia vindo da API. "Salmo 130" prova que o app tem conteúdo, coisa que "baixe
+  nosso aplicativo" não faz; sem o salmo sobra "Ofício Diário";
+- o bloco é composto como entrada de missal, não como caixa de aviso: filete,
+  rubrica em versalete na cor do dia, verbete em serifa e uma linha de índice
+  para abrir. Caixa arredondada com barra colorida à esquerda e botão de fundo
+  tingido são o par que faz qualquer seção parecer template genérico;
 - o botão leva para onde faz sentido em cada aparelho: Google Play no Android,
   App Store no iOS, `/oficio-diario` no desktop (onde não há app para
   instalar). O rótulo diz o destino — isca converte pior;

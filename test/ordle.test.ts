@@ -4,7 +4,12 @@ import { isValidGuess } from '../server/utils/dictionary'
 import { answerFor, gameId, gameNumber, grade, nextRolloverAt, normalize } from '../server/utils/ordle'
 import { computeLiturgicalDay, easter, extractDay, parseColor } from '../server/utils/liturgy'
 import { cookieOptions, seal, unseal } from '../server/utils/session'
-import { detectPlatform, keyboardState, shareText } from '../app/utils/ordle-shared'
+import {
+  detectPlatform,
+  keyboardState,
+  shareHeadline,
+  shareText,
+} from '../app/utils/ordle-shared'
 
 const marks = (guess: string, answer: string) => grade(guess, answer).join(' ')
 
@@ -198,19 +203,28 @@ describe('compartilhamento', () => {
     ['correct', 'correct', 'correct', 'correct', 'correct'],
   ] as const
 
-  it('vitória mostra a contagem', () => {
+  it('vitória conta em quantas tentativas', () => {
     const text = shareText({
       gameNumber: 142,
       results: results as never,
       status: 'won',
       url: 'ofício.app',
     })
-    expect(text).toBe('Ordle #142 · 2/6\n\n⬜🟨⬜⬜🟩\n🟩🟩🟩🟩🟩\n\nofício.app')
+    expect(text).toBe(
+      'Acertei o Ordle #142 em 2 tentativas.\n\n⬜🟨⬜⬜🟩\n🟩🟩🟩🟩🟩\n\nofício.app',
+    )
   })
 
-  it('derrota mostra X/6', () => {
+  it('acerto de primeira não fica no singular errado', () => {
+    // "em 1 tentativas" é o vacilo clássico de template
+    expect(shareHeadline(7, 1, 'won')).toBe('Acertei o Ordle #7 de primeira!')
+    expect(shareHeadline(7, 2, 'won')).toBe('Acertei o Ordle #7 em 2 tentativas.')
+  })
+
+  it('derrota não expõe contagem de tentativas', () => {
     const text = shareText({ gameNumber: 142, results: results as never, status: 'lost' })
-    expect(text).toContain('Ordle #142 · X/6')
+    expect(text).toContain('Não acertei o Ordle #142 hoje.')
+    expect(text).not.toMatch(/tentativas/)
   })
 
   it('tema escuro usa ⬛', () => {
