@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
   const s: Session = prev?.id === id ? prev : { id, guesses: [], status: 'playing' }
 
   // vira o dia com a aba aberta / cookie de ontem: começa partida nova
-  if (prev?.id !== id) setCookie(event, COOKIE_NAME, seal(s), cookieOptions)
+  if (prev?.id !== id) setCookie(event, COOKIE_NAME, seal(s), cookieOptions())
 
   const answer = answerFor(now)
   const day = await liturgicalDay(id)

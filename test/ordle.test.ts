@@ -3,7 +3,7 @@ import { WORDS } from '../server/utils/words'
 import { isValidGuess } from '../server/utils/dictionary'
 import { answerFor, gameId, gameNumber, grade, nextRolloverAt, normalize } from '../server/utils/ordle'
 import { computeLiturgicalDay, easter, extractDay, parseColor } from '../server/utils/liturgy'
-import { seal, unseal } from '../server/utils/session'
+import { cookieOptions, seal, unseal } from '../server/utils/session'
 import { keyboardState, shareText } from '../app/utils/ordle-shared'
 
 const marks = (guess: string, answer: string) => grade(guess, answer).join(' ')
@@ -372,5 +372,48 @@ describe('extractDay (payload real do Caminho Anglicano)', () => {
     expect(
       extractDay({ success: false, error: { code: 'PRAYER_BOOK_REQUIRED' } }, '2026-08-17'),
     ).toBeNull()
+  })
+})
+
+describe('segredo da sessão (fail-closed)', () => {
+  const withEnv = async (env: Record<string, string | undefined>, fn: () => void) => {
+    const saved = { ...process.env }
+    Object.assign(process.env, env)
+    for (const [k, v] of Object.entries(env)) if (v === undefined) delete process.env[k]
+    try {
+      fn()
+    } finally {
+      process.env = saved
+    }
+  }
+
+  it('sem ORDLE_SECRET, só dev e test usam a chave pública', async () => {
+    await withEnv({ ORDLE_SECRET: undefined, NODE_ENV: 'development' }, () => {
+      expect(() => seal({ id: 'x', guesses: [], status: 'playing' })).not.toThrow()
+    })
+  })
+
+  it('sem ORDLE_SECRET e sem NODE_ENV, estoura em vez de assinar', async () => {
+    // NODE_ENV vazio ou 'preview' não pode cair na chave pública do repo:
+    // com ela qualquer um forja um cookie com status 'won'
+    for (const env of [undefined, 'preview', 'production', 'staging']) {
+      await withEnv({ ORDLE_SECRET: undefined, NODE_ENV: env }, () => {
+        expect(() => seal({ id: 'x', guesses: [], status: 'playing' }), String(env)).toThrow(
+          /ORDLE_SECRET/,
+        )
+      })
+    }
+  })
+
+  it('rejeita segredo curto demais', async () => {
+    await withEnv({ ORDLE_SECRET: 'curto', NODE_ENV: 'production' }, () => {
+      expect(() => seal({ id: 'x', guesses: [], status: 'playing' })).toThrow(/ORDLE_SECRET/)
+    })
+  })
+
+  it('cookie sai secure fora de dev', async () => {
+    await withEnv({ NODE_ENV: 'production' }, () => expect(cookieOptions().secure).toBe(true))
+    await withEnv({ NODE_ENV: undefined }, () => expect(cookieOptions().secure).toBe(true))
+    await withEnv({ NODE_ENV: 'development' }, () => expect(cookieOptions().secure).toBe(false))
   })
 })

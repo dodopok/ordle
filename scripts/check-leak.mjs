@@ -2,14 +2,15 @@
 /**
  * Regra de ouro da §4: nada de `server/utils/words.ts` pode chegar ao client.
  *
- * Roda depois de `nuxt build` e varre `.output/public/` atrás de qualquer chave
+ * Roda depois de `nuxt build` e varre a saída estática atrás de qualquer chave
  * de resposta, de qualquer definição e do dicionário de palpites. Sai com
  * código 1 se achar alguma coisa — dá pra plugar num CI direto.
  */
-import { readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
-const PUBLIC_DIR = '.output/public'
+// o preset padrão gera em .output/public; o da Vercel, em .vercel/output/static
+const CANDIDATES = ['.output/public', '.vercel/output/static']
 
 function walk(dir) {
   const out = []
@@ -21,13 +22,13 @@ function walk(dir) {
   return out
 }
 
-let files
-try {
-  files = walk(PUBLIC_DIR)
-} catch {
-  console.error(`✗ ${PUBLIC_DIR} não existe — rode \`npm run build\` antes.`)
+const dirs = CANDIDATES.filter((d) => existsSync(d))
+if (!dirs.length) {
+  console.error(`✗ nenhum de ${CANDIDATES.join(', ')} existe — rode \`npm run build\` antes.`)
   process.exit(1)
 }
+
+const files = dirs.flatMap(walk)
 
 const bundles = files.map((f) => ({ f, text: readFileSync(f, 'latin1') }))
 
@@ -52,5 +53,5 @@ if (findings.length) {
 }
 
 console.log(
-  `✓ nenhuma das ${keys.length} respostas, nem as definições, nem o dicionário aparecem em ${PUBLIC_DIR} (${files.length} arquivos)`,
+  `✓ nenhuma das ${keys.length} respostas, nem as definições, nem o dicionário aparecem em ${dirs.join(', ')} (${files.length} arquivos)`,
 )

@@ -24,6 +24,27 @@ npm run build
 ORDLE_SECRET=$(openssl rand -base64 32) node .output/server/index.mjs
 ```
 
+## Deploy (Vercel)
+
+Nuxt detecta a Vercel sozinho — não precisa de `vercel.json`. Configure em
+Settings → Environment Variables, nos três ambientes:
+
+| Variável | Obrigatória | Valor |
+|---|---|---|
+| `ORDLE_SECRET` | sim | `openssl rand -base64 32`. **A mesma em Production e Preview** — trocar derruba as partidas em andamento |
+| `ORDLE_LITURGY_KEY` | não | o `APP_INTERNAL_IDENTIFIER` do app. Sem ela o jogo usa o cálculo local |
+| `ORDLE_LITURGY_HEADER` | não | só se sair de `X-App-Internal-Id` |
+| `ORDLE_LITURGY_PRAYER_BOOK` | não | só se sair de `loc_2015` |
+
+Sem `ORDLE_SECRET` o servidor devolve 500 em vez de assinar com a chave de dev,
+que é pública — ver "fail-closed" abaixo.
+
+Duas coisas guardam estado em memória do processo e, em serverless, valem por
+instância: o **rate limit** (30 req/min vira 30 por lambda — na prática mais
+frouxo) e o **cache da cor litúrgica** (cada instância nova paga um round-trip).
+Nenhum dos dois afeta a integridade do jogo; se o rate limit passar a importar,
+troque o Map por Vercel KV.
+
 ## Scripts
 
 | | |
@@ -47,6 +68,12 @@ cookie `httpOnly` com HMAC-SHA256 (`server/utils/session.ts`). O cliente carrega
 o estado mas não consegue forjá-lo, e não consegue zerar a contagem de
 tentativas para brutar palpites na mesma partida. O `localStorage` é só cache de
 UI e estatísticas — quem manda é o servidor, sempre.
+
+A assinatura é **fail-closed**: a chave de fallback está aqui no repo, e com ela
+qualquer um forja um cookie com `status: 'won'`, então ela só vale quando
+`NODE_ENV` diz explicitamente `development` ou `test`. `NODE_ENV` vazio,
+`preview` ou qualquer outra coisa estoura na hora de assinar em vez de cair no
+atalho. O `secure` do cookie segue a mesma regra.
 
 **A palavra do dia é determinística.** `gameNumber` conta dias desde 2026-01-01
 em `America/Sao_Paulo`, e indexa uma permutação da lista embaralhada com seed
