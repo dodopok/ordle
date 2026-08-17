@@ -28,7 +28,7 @@ export default defineEventHandler(async (event) => {
   if (key === answer.key) s.status = 'won'
   else if (s.guesses.length >= MAX_ATTEMPTS) s.status = 'lost'
 
-  setCookie(event, COOKIE_NAME, seal(s), cookieOptions)
+  setCookie(event, COOKIE_NAME, seal(s), cookieOptions())
 
   return {
     result: grade(key, answer.key),

@@ -16,10 +16,22 @@ export type Session = {
 function secret(): string {
   const s = process.env.ORDLE_SECRET
   if (s && s.length >= 16) return s
-  if (process.env.NODE_ENV === 'production')
-    throw new Error('ORDLE_SECRET ausente ou curto demais (mínimo 16 bytes)')
-  // dev: chave efêmera, cai a cada restart — e tudo bem
+
+  // Fail-closed de propósito: a chave de dev é pública (está aqui no repo), e
+  // com ela qualquer um forja um cookie com status 'won'. Então ela só vale
+  // quando o ambiente diz explicitamente que é dev ou teste — NODE_ENV vazio,
+  // 'preview' ou qualquer outra coisa cai no erro, não no atalho.
+  if (!isDevLike())
+    throw new Error(
+      'ORDLE_SECRET ausente ou curto demais (mínimo 16 caracteres). ' +
+        'Gere com `openssl rand -base64 32` e configure no ambiente.',
+    )
   return 'dev-only-insecure-ordle-secret'
+}
+
+const isDevLike = () => {
+  const env = process.env.NODE_ENV
+  return env === 'development' || env === 'test'
 }
 
 const b64 = (s: string) => Buffer.from(s).toString('base64url')
@@ -48,10 +60,15 @@ export function unseal(token?: string): Session | null {
   }
 }
 
-export const cookieOptions = {
-  httpOnly: true,
-  sameSite: 'lax',
-  secure: process.env.NODE_ENV === 'production',
-  path: '/',
-  maxAge: COOKIE_MAX_AGE,
-} as const
+/**
+ * `secure` também é fail-closed: só sai do ar em dev declarado, para o cookie
+ * não vazar em http num ambiente que esqueceu de setar NODE_ENV.
+ */
+export const cookieOptions = () =>
+  ({
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: !isDevLike(),
+    path: '/',
+    maxAge: COOKIE_MAX_AGE,
+  }) as const
