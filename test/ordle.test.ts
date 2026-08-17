@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { WORDS } from '../server/utils/words'
 import { isValidGuess } from '../server/utils/dictionary'
 import { answerFor, gameId, gameNumber, grade, nextRolloverAt, normalize } from '../server/utils/ordle'
-import { computeLiturgicalDay, easter, parseColor } from '../server/utils/liturgy'
+import { computeLiturgicalDay, easter, extractDay, parseColor } from '../server/utils/liturgy'
 import { seal, unseal } from '../server/utils/session'
-import { keyboardState, shareText } from '../utils/ordle-shared'
+import { keyboardState, shareText } from '../app/utils/ordle-shared'
 
 const marks = (guess: string, answer: string) => grade(guess, answer).join(' ')
 
@@ -241,5 +241,43 @@ describe('calendário litúrgico (fallback local)', () => {
     expect(parseColor('dourado')).toBe('white')
     expect(parseColor('chartreuse')).toBeNull()
     expect(parseColor(42)).toBeNull()
+  })
+})
+
+describe('extractDay (payload do Caminho Anglicano)', () => {
+  const DIA = '2026-08-17'
+
+  it('lê a forma plana', () => {
+    expect(
+      extractDay({ color: 'verde', season: 'Tempo Comum', description: ['Próprio 15'] }, DIA),
+    ).toEqual({ color: 'green', season: 'Tempo Comum', celebration: 'Próprio 15' })
+  })
+
+  it('desembrulha data/calendar', () => {
+    const day = extractDay({ data: { calendar: { color: 'roxo', season: 'Advento' } } }, DIA)
+    expect(day?.color).toBe('purple')
+    expect(day?.season).toBe('Advento')
+  })
+
+  it('aceita celebração como objeto', () => {
+    const day = extractDay(
+      { liturgical_color: 'vermelho', celebration: { name: 'São Lucas' } },
+      DIA,
+    )
+    expect(day).toMatchObject({ color: 'red', celebration: 'São Lucas' })
+  })
+
+  it('completa season e celebração com o cálculo local', () => {
+    const day = extractDay({ color: 'branco' }, DIA)
+    expect(day).toEqual({ color: 'white', season: 'Tempo Comum', celebration: 'Féria' })
+  })
+
+  it('devolve null quando a cor não dá para reconhecer', () => {
+    // melhor cair no cálculo local do que pintar o header de uma cor errada
+    expect(extractDay({ season: 'Tempo Comum' }, DIA)).toBeNull()
+    expect(extractDay({ color: 'turquesa' }, DIA)).toBeNull()
+    expect(extractDay({ error: 'Unauthorized access' }, DIA)).toBeNull()
+    expect(extractDay(null, DIA)).toBeNull()
+    expect(extractDay([1, 2, 3], DIA)).toBeNull()
   })
 })

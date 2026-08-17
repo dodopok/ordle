@@ -8,17 +8,21 @@ export type LiturgicalDay = {
 }
 
 /**
- * Cor litúrgica do dia.
+ * Cor litúrgica do dia, vinda da API do Caminho Anglicano — a mesma que
+ * alimenta o Ordo.
  *
- * Preferimos a Estêvão API (a mesma que alimenta o Ordo). Ela é opcional: se
- * `ORDLE_LITURGY_API` não estiver setada, ou a chamada falhar/estourar o
- * timeout, caímos no cálculo local. O jogo nunca deve quebrar por causa de um
- * filete colorido no header.
+ *   GET https://api.caminhoanglicano.com.br/api/v1/calendar/:ano/:mes/:dia
  *
- * A API precisa responder JSON com, no mínimo, `color` (em pt-BR ou en) e
- * opcionalmente `season` e `description`/`celebration`.
- * Ex.: ORDLE_LITURGY_API="https://exemplo.app/api/liturgical-day?date="
+ * A API exige verificação de app: sem credencial ela responde 401 com
+ * `APP_VERIFICATION_REQUIRED`. O header e o valor vêm de `ORDLE_LITURGY_KEY`
+ * (e `ORDLE_LITURGY_HEADER`, se não for o padrão) — nunca hardcode a chave.
+ *
+ * Tudo isso é opcional de propósito: sem chave, com erro, com 401 ou com
+ * timeout, caímos no cálculo local. O jogo nunca deve quebrar — nem atrasar —
+ * por causa de um filete colorido no header.
  */
+const API_BASE = 'https://api.caminhoanglicano.com.br/api/v1/calendar'
+const DEFAULT_HEADER = 'X-App-Identifier'
 const API_TIMEOUT_MS = 1500
 const CACHE_TTL_MS = 60 * 60 * 1000
 
@@ -47,38 +51,97 @@ export function parseColor(raw: unknown): LiturgicalColor | null {
   return COLOR_ALIASES[raw.trim().toLowerCase()] ?? null
 }
 
+/**
+ * Stale-while-revalidate: entrada fresca responde na hora; entrada vencida
+ * responde na hora e revalida em segundo plano. Só a primeira chamada da
+ * instância paga o round-trip até a API — e mesmo essa tem timeout de 1,5s.
+ */
 export async function liturgicalDay(gameId: string): Promise<LiturgicalDay> {
   const hit = cache.get(gameId)
-  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.day
+  if (hit) {
+    if (Date.now() - hit.at >= CACHE_TTL_MS) void refresh(gameId)
+    return hit.day
+  }
+  return refresh(gameId)
+}
 
+async function refresh(gameId: string): Promise<LiturgicalDay> {
   const day = (await fromApi(gameId)) ?? computeLiturgicalDay(gameId)
   cache.set(gameId, { at: Date.now(), day })
   return day
 }
 
+/** Desembrulha os invólucros que a API pode usar em volta do dia. */
+function unwrap(payload: unknown): Record<string, unknown> | null {
+  let node: unknown = payload
+  for (const key of ['data', 'calendar', 'day', 'liturgical_day']) {
+    if (node && typeof node === 'object' && key in (node as Record<string, unknown>))
+      node = (node as Record<string, unknown>)[key]
+  }
+  return node && typeof node === 'object' && !Array.isArray(node)
+    ? (node as Record<string, unknown>)
+    : null
+}
+
+const firstString = (...candidates: unknown[]): string | null => {
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.trim()) return c.trim()
+    if (Array.isArray(c) && typeof c[0] === 'string' && c[0].trim()) return c[0].trim()
+    if (c && typeof c === 'object') {
+      const o = c as Record<string, unknown>
+      for (const k of ['name', 'title', 'label']) if (typeof o[k] === 'string') return o[k] as string
+    }
+  }
+  return null
+}
+
+/**
+ * Extrai o dia litúrgico do payload da API.
+ *
+ * Tolerante de propósito: aceita `color`/`liturgical_color`, celebração como
+ * string ou objeto com `name`/`title`, e `description` como array. Se a cor
+ * não vier reconhecível, devolve null e o chamador cai no cálculo local —
+ * uma cor errada é pior que a cor calculada aqui.
+ */
+export function extractDay(payload: unknown, gameId: string): LiturgicalDay | null {
+  const node = unwrap(payload)
+  if (!node) return null
+
+  const color =
+    parseColor(node.color) ?? parseColor(node.liturgical_color) ?? parseColor(node.colour)
+  if (!color) return null
+
+  const fallback = computeLiturgicalDay(gameId)
+  return {
+    color,
+    season: firstString(node.season, node.liturgical_season, node.season_name) ?? fallback.season,
+    celebration:
+      firstString(
+        node.celebration,
+        node.celebration_name,
+        node.title,
+        node.name,
+        node.description,
+      ) ?? fallback.celebration,
+  }
+}
+
 async function fromApi(gameId: string): Promise<LiturgicalDay | null> {
-  const base = process.env.ORDLE_LITURGY_API
-  if (!base) return null
+  const key = process.env.ORDLE_LITURGY_KEY
+  if (!key) return null
+
+  const [year, month, day] = gameId.split('-').map(Number)
+  const header = process.env.ORDLE_LITURGY_HEADER || DEFAULT_HEADER
+
   try {
-    const res = await $fetch<Record<string, unknown>>(`${base}${gameId}`, {
+    const res = await $fetch(`${API_BASE}/${year}/${month}/${day}`, {
+      headers: { [header]: key, Accept: 'application/json' },
       timeout: API_TIMEOUT_MS,
       retry: 0,
     })
-    const color = parseColor(res?.color)
-    if (!color) return null
-    const description = Array.isArray(res?.description) ? res.description[0] : res?.description
-    const fallback = computeLiturgicalDay(gameId)
-    return {
-      color,
-      season: typeof res?.season === 'string' ? res.season : fallback.season,
-      celebration:
-        typeof res?.celebration === 'string'
-          ? res.celebration
-          : typeof description === 'string'
-            ? description
-            : fallback.celebration,
-    }
+    return extractDay(res, gameId)
   } catch {
+    // 401 sem credencial, rede fora, timeout — tanto faz, o fallback assume
     return null
   }
 }

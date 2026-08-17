@@ -7,6 +7,8 @@ jogo revela a grafia acentuada e a **definição** do termo — quem erra "AMBÃ
 aprende o que é um ambão. É catequético por acidente, e é isso que justifica o
 link para o [Ordo](https://oficio.app) na tela de resultado.
 
+Nuxt 4 (`app/` para o client, `server/` para o Nitro).
+
 ## Rodando
 
 ```sh
@@ -35,8 +37,8 @@ ORDLE_SECRET=$(openssl rand -base64 32) node .output/server/index.mjs
 ## Como funciona
 
 **A resposta nunca sai do servidor** até a partida acabar. `server/utils/words.ts`
-não pode ser importado por nada em `composables/`, `components/` ou `pages/` —
-se entrar no bundle do client, a resposta vaza. `npm run check:leak` reprova o
+não pode ser importado por nada dentro de `app/` — se entrar no bundle do
+client, a resposta vaza. `npm run check:leak` reprova o
 build quando isso acontece, e a regra vale também para exemplos na tela de
 ajuda (por isso ela usa TRIGO/OLIVA/MURAL, que não estão na lista).
 
@@ -75,12 +77,29 @@ dia é impossível de digitar.
 
 ## Cor litúrgica
 
-`server/utils/liturgy.ts` prefere a Estêvão API (a mesma que alimenta o Ordo),
-configurada via `ORDLE_LITURGY_API` — o `gameId` é concatenado no fim da URL,
-a resposta precisa ter um campo `color` (aceita pt-BR ou inglês). Timeout de
-1,5s, cache de uma hora, e qualquer falha cai no cálculo local: computus
-gregoriano + estações + as festas fixas que valem desvio de cor. O jogo nunca
-quebra por causa de um filete colorido.
+`server/utils/liturgy.ts` busca o dia na API do Caminho Anglicano — a mesma que
+alimenta o Ordo:
+
+```
+GET https://api.caminhoanglicano.com.br/api/v1/calendar/:ano/:mes/:dia
+```
+
+A API exige verificação de app: sem credencial devolve 401
+`APP_VERIFICATION_REQUIRED`. Passe a chave em `ORDLE_LITURGY_KEY` (e o nome do
+header em `ORDLE_LITURGY_HEADER`, se não for `X-App-Identifier`). Nunca
+hardcode a chave.
+
+Timeout de 1,5s, cache de uma hora com stale-while-revalidate — entrada vencida
+responde na hora e revalida em segundo plano, então só a primeira chamada de
+cada instância paga o round-trip. Qualquer falha (401, rede fora, timeout, cor
+irreconhecível) cai no cálculo local: computus gregoriano + estações +
+Gaudete/Laetare + as festas fixas que valem desvio de cor. O jogo nunca quebra —
+nem atrasa — por causa de um filete colorido.
+
+`extractDay()` é tolerante com o formato do payload (`color` ou
+`liturgical_color`, celebração como string ou objeto, invólucro `data`/`calendar`)
+e tem teste próprio. Se a resposta real não bater com nenhuma das formas
+previstas, é lá que se ajusta.
 
 ## Antifraude
 
