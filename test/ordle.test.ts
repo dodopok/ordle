@@ -98,8 +98,16 @@ describe('palavra do dia', () => {
     expect(gameNumber(at('2026-08-18')) - gameNumber(at('2026-08-17'))).toBe(1)
   })
 
-  it('gameNumber começa em 0 no dia 1º de janeiro de 2026', () => {
-    expect(gameNumber(at('2026-01-01'))).toBe(0)
+  it('o dia do lançamento é o #1, não o #0', () => {
+    // é número que a pessoa lê no header e compartilha: começa onde ela espera
+    expect(gameNumber(at('2026-08-17'))).toBe(1)
+    expect(gameNumber(at('2026-08-18'))).toBe(2)
+    expect(gameNumber(at('2026-09-16'))).toBe(31)
+  })
+
+  it('vira o número junto com a meia-noite de São Paulo', () => {
+    expect(gameNumber(Date.parse('2026-08-17T23:59:00-03:00'))).toBe(1)
+    expect(gameNumber(Date.parse('2026-08-18T00:00:00-03:00'))).toBe(2)
   })
 
   it('é estável dentro do dia e muda entre dias', () => {
@@ -111,7 +119,7 @@ describe('palavra do dia', () => {
   })
 
   it('não repete palavra dentro de um ciclo completo', () => {
-    const start = at('2026-01-01')
+    const start = at('2026-08-17')
     const keys = Array.from({ length: WORDS.length }, (_, i) =>
       answerFor(start + i * 86_400_000).key,
     )
@@ -119,7 +127,14 @@ describe('palavra do dia', () => {
   })
 
   it('a ordem não é a do array', () => {
-    expect(answerFor(at('2026-01-01')).key).not.toBe(WORDS[0].key)
+    expect(answerFor(at('2026-08-17')).key).not.toBe(WORDS[0].key)
+  })
+
+  it('a palavra de estreia é CREDO', () => {
+    // fixa a âncora: se alguém mexer em LAUNCH, na seed ou na ordem da lista,
+    // este teste cai antes de o jogo renumerar todo mundo em produção
+    expect(gameNumber(at('2026-08-17'))).toBe(1)
+    expect(answerFor(at('2026-08-17')).word).toBe('CREDO')
   })
 
   it('nextRolloverAt cai na meia-noite seguinte em São Paulo', () => {

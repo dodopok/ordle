@@ -82,10 +82,17 @@ qualquer um forja um cookie com `status: 'won'`, então ela só vale quando
 `preview` ou qualquer outra coisa estoura na hora de assinar em vez de cair no
 atalho. O `secure` do cookie segue a mesma regra.
 
-**A palavra do dia é determinística.** `gameNumber` conta dias desde 2026-01-01
-em `America/Sao_Paulo`, e indexa uma permutação da lista embaralhada com seed
-fixa (`server/utils/ordle.ts`). Sem estado, sem banco, e o dia seguinte nunca é
-pré-carregado.
+**A palavra do dia é determinística.** `gameNumber` conta dias desde `LAUNCH`
+em `America/Sao_Paulo` — contagem 1-based, o dia da estreia é o #1 — e indexa
+uma permutação da lista embaralhada com seed fixa (`server/utils/ordle.ts`).
+Sem estado, sem banco, e o dia seguinte nunca é pré-carregado.
+
+**`LAUNCH` não se mexe com o jogo no ar.** Essa constante numera os dias *e*
+indexa a resposta. Mudá-la depois da estreia renumera todo mundo (o "#142" que
+as pessoas compartilharam passa a apontar para outro dia) e troca a palavra no
+meio do dia, invalidando as partidas em andamento — os palpites já dados foram
+coloridos contra a palavra antiga. Há teste fixando que o #1 é CREDO,
+justamente para essa mudança cair no CI e não em produção.
 
 **Dá para preencher fora de ordem.** Tocar num quadrado leva o cursor para
 aquela posição, e a letra entra ali. Por isso a linha em digitação é um array
