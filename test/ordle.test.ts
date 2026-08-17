@@ -203,9 +203,9 @@ describe('compartilhamento', () => {
       gameNumber: 142,
       results: results as never,
       status: 'won',
-      url: 'ofício.app/ordle',
+      url: 'ofício.app',
     })
-    expect(text).toBe('Ordle #142 · 2/6\n\n⬜🟨⬜⬜🟩\n🟩🟩🟩🟩🟩\n\nofício.app/ordle')
+    expect(text).toBe('Ordle #142 · 2/6\n\n⬜🟨⬜⬜🟩\n🟩🟩🟩🟩🟩\n\nofício.app')
   })
 
   it('derrota mostra X/6', () => {

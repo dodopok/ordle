@@ -64,5 +64,5 @@ export function shareText(opts: {
   const palette = opts.dark ? EMOJI_DARK : EMOJI
   const score = opts.status === 'won' ? `${opts.results.length}/${MAX_ATTEMPTS}` : `X/${MAX_ATTEMPTS}`
   const grid = opts.results.map((row) => row.map((m) => palette[m]).join('')).join('\n')
-  return `Ordle #${opts.gameNumber} · ${score}\n\n${grid}\n\n${opts.url ?? 'ofício.app/ordle'}`
+  return `Ordle #${opts.gameNumber} · ${score}\n\n${grid}\n\n${opts.url ?? 'ofício.app'}`
 }

@@ -13,7 +13,7 @@ Nuxt 4 (`app/` para o client, `server/` para o Nitro).
 
 ```sh
 npm install
-npm run dev            # http://localhost:3000/ordle
+npm run dev            # http://localhost:3000
 ```
 
 Em produção, `ORDLE_SECRET` é obrigatório (o servidor se recusa a subir sem
@@ -63,6 +63,14 @@ troque o Map por Vercel KV.
 | `npm run dictionary` | regenera `server/utils/pt-5.json` a partir do Hunspell pt_BR |
 
 ## Como funciona
+
+**O jogo mora na raiz.** `/ordle` foi a URL canônica durante o
+desenvolvimento e continua respondendo, com 301 para `/` — encaminhar custa
+nada e evita 404 em link que já tenha circulado. A raiz ser a URL compartilhada
+é o motivo de as tags Open Graph existirem: o crawler de preview do WhatsApp
+não executa JavaScript, então elas precisam estar no HTML que o servidor
+entrega. Estão, mesmo com a página em `ssr: false`, porque o Nuxt monta o head
+no shell — conferido no HTML cru do build.
 
 **A resposta nunca sai do servidor** até a partida acabar. `server/utils/words.ts`
 não pode ser importado por nada dentro de `app/` — se entrar no bundle do
