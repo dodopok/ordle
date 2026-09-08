@@ -142,6 +142,47 @@ describe('palavra do dia', () => {
     expect(answerFor(at('2026-08-17')).word).toBe('CREDO')
   })
 
+  /**
+   * Sequência congelada do lote de lançamento: os jogos #1 a #68, na ordem em
+   * que o jogo os serviu desde a estreia. Acrescentar palavras a `words.ts`
+   * não pode mexer em nenhuma delas — quem jogou o #7 e compartilhou o
+   * resultado tem que continuar tendo jogado a mesma palavra.
+   *
+   * Se este teste cair depois de você acrescentar palavras, a lista foi
+   * reembaralhada inteira: as entradas novas vão no FIM de `words.ts` e num
+   * lote NOVO em BATCHES, nunca esticando um lote fechado.
+   */
+  const LOTE_DE_LANCAMENTO = [
+    'CREDO', 'SALVE', 'ICONE', 'FERIA', 'PADRE', 'SANTO',
+    'NIMBO', 'GRACA', 'CORAL', 'RITOS', 'MAGOS', 'CISMA',
+    'TERCA', 'SINAL', 'PRIOR', 'AMBAO', 'AMITO', 'MITRA',
+    'FONTE', 'SALMO', 'BISPO', 'HINOS', 'MISSA', 'CULTO',
+    'CINZA', 'CAPUZ', 'DOGMA', 'PAULO', 'TRONO', 'SEXTA',
+    'SINOS', 'LENHO', 'CANON', 'CANTO', 'ABADE', 'ATRIO',
+    'MANTO', 'UNCAO', 'LINHO', 'PALMA', 'ORDEM', 'NATAL',
+    'PALIO', 'ORGAO', 'KYRIE', 'PALIA', 'RAMOS', 'SIMAO',
+    'ANDRE', 'LUCAS', 'PRECE', 'VINHO', 'CULPA', 'ALTAR',
+    'VOTOS', 'CLERO', 'MONGE', 'AGNUS', 'REGRA', 'JEJUM',
+    'CURIA', 'CIRIO', 'VELAS', 'CORPO', 'LEIGO', 'TIAGO',
+    'PEDRO', 'MARIA',
+  ]
+
+  it('acrescentar palavras não mexe nos dias já servidos', () => {
+    const start = at('2026-08-17')
+    const servidas = LOTE_DE_LANCAMENTO.map((_, i) => answerFor(start + i * 86_400_000).key)
+    expect(servidas).toEqual(LOTE_DE_LANCAMENTO)
+  })
+
+  it('todo dia tem resposta: os lotes cobrem a lista inteira', () => {
+    // o próprio módulo estoura se BATCHES e WORDS divergirem; aqui é a rede
+    // que faz isso cair no CI e não no primeiro acesso da manhã
+    const start = at('2026-08-17')
+    const ciclo = Array.from({ length: WORDS.length }, (_, i) =>
+      answerFor(start + i * 86_400_000),
+    )
+    expect(ciclo.filter((e) => !e?.key)).toEqual([])
+  })
+
   it('nextRolloverAt cai na meia-noite seguinte em São Paulo', () => {
     const now = Date.parse('2026-08-17T22:00:00-03:00')
     expect(nextRolloverAt(now)).toBe(Date.parse('2026-08-18T00:00:00-03:00'))

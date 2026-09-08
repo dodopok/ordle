@@ -51,7 +51,7 @@ export const normalize = (s: string) =>
     .toUpperCase()
     .trim()
 
-// embaralha uma vez, com seed fixa, pra ordem não ser a do array
+// embaralha com seed fixa, pra ordem não ser a do array
 function mulberry32(seed: number) {
   return () => {
     seed |= 0
@@ -62,14 +62,50 @@ function mulberry32(seed: number) {
   }
 }
 
+/**
+ * Lotes da lista de respostas — a ordem é **estável por prefixo**.
+ *
+ * ⚠️  NÃO REEMBARALHE A LISTA INTEIRA COM O JOGO NO AR. Embaralhar tudo de novo
+ *     (que é o que acontece se você só acrescentar palavras a uma permutação
+ *     única) troca a resposta de dias já jogados — o "#7" que alguém
+ *     compartilhou passa a apontar para outra palavra — e, se pegar o dia
+ *     corrente, invalida as partidas em andamento.
+ *
+ * Por isso o embaralhamento é feito em lotes: cada lote é embaralhado só entre
+ * si e concatenado no fim, então acrescentar palavras nunca mexe no que já foi
+ * sorteado. Como `answerFor` indexa por `n % ORDER.length`, o ciclo apenas
+ * fica mais longo: os dias de hoje até o fim do lote atual continuam iguais.
+ *
+ * Para acrescentar palavras: escreva as entradas novas **no fim** de
+ * `words.ts` e abra um lote novo aqui, com a quantidade e uma seed própria.
+ * Nunca mexa num lote fechado nem intercale palavra no meio da lista.
+ */
+const BATCHES: { size: number; seed: number }[] = [
+  { size: 69, seed: 20260817 }, // lançamento
+  { size: 45, seed: 20260908 }, // segunda leva
+]
+
 const ORDER = (() => {
-  const rand = mulberry32(20260817)
-  const idx = WORDS.map((_, i) => i)
-  for (let i = idx.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1))
-    ;[idx[i], idx[j]] = [idx[j], idx[i]]
+  const total = BATCHES.reduce((n, b) => n + b.size, 0)
+  if (total !== WORDS.length) {
+    // fail-closed: sobrando, a palavra nova nunca sairia; faltando, o índice
+    // estoura e `answerFor` devolve undefined no meio da madrugada
+    throw new Error(
+      `ordle: BATCHES soma ${total} mas WORDS tem ${WORDS.length} — abra um lote novo em vez de esticar um fechado`,
+    )
   }
-  return idx
+
+  const out: number[] = []
+  for (const { size, seed } of BATCHES) {
+    const rand = mulberry32(seed)
+    const idx = Array.from({ length: size }, (_, i) => out.length + i)
+    for (let i = idx.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1))
+      ;[idx[i], idx[j]] = [idx[j], idx[i]]
+    }
+    out.push(...idx)
+  }
+  return out
 })()
 
 export function answerFor(now: number = Date.now()): Entry {

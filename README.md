@@ -95,6 +95,18 @@ em `America/Sao_Paulo` — contagem 1-based, o dia da estreia é o #1 — e inde
 uma permutação da lista embaralhada com seed fixa (`server/utils/ordle.ts`).
 Sem estado, sem banco, e o dia seguinte nunca é pré-carregado.
 
+**Palavra nova entra em lote, no fim da lista.** A permutação é embaralhada por
+lotes (`BATCHES` em `ordle.ts`), e não de uma vez só: cada lote é embaralhado
+entre si e concatenado no fim, então acrescentar palavras alonga o ciclo sem
+mexer em nenhum dia já servido. Reembaralhar a lista inteira — que é o que
+acontece se você só empurrar entradas novas numa permutação única — trocaria a
+resposta de dias já jogados e invalidaria as partidas em andamento, do mesmo
+jeito que mexer em `LAUNCH`. Para acrescentar: as entradas novas vão no **fim**
+de `words.ts` e ganham um **lote novo** em `BATCHES`, com seed própria; lote
+fechado não se estica. A soma dos lotes tem que bater com `WORDS.length` (o
+módulo estoura se não bater) e há teste fixando a sequência dos jogos #1 a #68,
+para essa mudança cair no CI e não em produção.
+
 **`LAUNCH` não se mexe com o jogo no ar.** Essa constante numera os dias *e*
 indexa a resposta. Mudá-la depois da estreia renumera todo mundo (o "#142" que
 as pessoas compartilharam passa a apontar para outro dia) e troca a palavra no
@@ -141,8 +153,8 @@ pequeno, não só filete.
 
 ## Duas listas de palavras
 
-- `server/utils/words.ts` — as respostas, curadas, com definição. 69 termos ≈
-  dois meses e meio de jogo.
+- `server/utils/words.ts` — as respostas, curadas, com definição. 114 termos ≈
+  quase quatro meses de jogo.
 - `server/utils/pt-5.json` — os palpites válidos: ~19,6 mil palavras de 5 letras
   do dicionário Hunspell pt_BR (VERO/LibreOffice), com os afixos expandidos.
   Sem a expansão o jogador não conseguiria usar plural nem conjugação
