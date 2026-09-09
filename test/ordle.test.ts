@@ -15,6 +15,7 @@ import {
 import { computeLiturgicalDay, easter, extractDay, parseColor } from '../server/utils/liturgy'
 import { cookieOptions, seal, unseal } from '../server/utils/session'
 import {
+  canShareNatively,
   detectPlatform,
   keyboardState,
   shareHeadline,
@@ -711,6 +712,37 @@ describe('detectPlatform (destino do gancho do Ordo)', () => {
   it('UA desconhecido cai no desktop, que é o destino que sempre funciona', () => {
     expect(detectPlatform('')).toBe('desktop')
     expect(detectPlatform('curl/8.4.0')).toBe('desktop')
+  })
+})
+
+describe('canShareNatively (share sheet do sistema)', () => {
+  const windows =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36'
+  const mac =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15'
+  const iphone =
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
+  const android =
+    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Mobile Safari/537.36'
+
+  it('Windows fica de fora mesmo com a API disponível', () => {
+    // o Chrome e o Edge expõem `share` lá, e é justamente aí que trava
+    expect(canShareNatively(windows, true)).toBe(false)
+  })
+
+  it('Mac usa a folha nativa: ela funciona', () => {
+    expect(canShareNatively(mac, true)).toBe(true)
+  })
+
+  it('celular usa a folha nativa', () => {
+    expect(canShareNatively(iphone, true)).toBe(true)
+    expect(canShareNatively(android, true)).toBe(true)
+  })
+
+  it('sem a API, ninguém compartilha nativo', () => {
+    expect(canShareNatively(mac, false)).toBe(false)
+    expect(canShareNatively(iphone, false)).toBe(false)
+    expect(canShareNatively('', false)).toBe(false)
   })
 })
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  canShareNatively,
   detectPlatform,
   shareText,
   type GameStatus,
@@ -118,7 +119,18 @@ const otherLabel = computed(() => {
   return props.otherDone ? `Ver ${outro} de hoje` : `Jogar ${outro} de hoje`
 })
 
-const shared = ref(false)
+/**
+ * O que aconteceu de fato, e não só se aconteceu: no Windows o botão copia, e
+ * dizer "Compartilhado" ali prometeria um envio que não houve — a pessoa fica
+ * esperando uma janela que nunca vem, em vez de ir colar o texto.
+ */
+const outcome = ref<'idle' | 'shared' | 'copied'>('idle')
+
+const shareLabel = computed(() =>
+  outcome.value === 'shared' ? 'Compartilhado' : outcome.value === 'copied' ? 'Copiado' : 'Compartilhar',
+)
+
+/** só para o que dá errado; o sucesso já está escrito no botão */
 const toast = ref('')
 
 const winRate = computed(() =>
@@ -147,6 +159,43 @@ onMounted(() => {
 onBeforeUnmount(() => clearInterval(timer))
 
 // --- compartilhar --------------------------------------------------------
+
+/**
+ * Cópia manual para quando `navigator.clipboard` não existe ou é negado —
+ * contexto inseguro (http://…), navegador antigo, permissão bloqueada.
+ */
+function copyFallback(text: string) {
+  const el = document.createElement('textarea')
+  el.value = text
+  el.setAttribute('readonly', '')
+  el.style.position = 'fixed'
+  el.style.opacity = '0'
+  document.body.appendChild(el)
+  el.select()
+  try {
+    return document.execCommand('copy')
+  } finally {
+    document.body.removeChild(el)
+  }
+}
+
+async function copy(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    if (!copyFallback(text)) throw new Error('clipboard indisponível')
+  }
+}
+
+/**
+ * Share sheet nativo onde ele funciona; no Windows, copiar.
+ *
+ * Mac, iOS e Android abrem uma folha que resolve rápido. O Windows não: lá o
+ * `navigator.share` existe (Chrome e Edge) mas delega para a folha do sistema,
+ * que trava no spinner com frequência — e como a promessa não rejeita enquanto
+ * isso, o usuário fica preso numa caixa que não é nossa e o copiar nunca roda.
+ * Copiar direto é o gesto que ele ia fazer de qualquer jeito.
+ */
 async function share() {
   const text = shareText({
     gameNumber: props.gameNumber,
@@ -156,17 +205,30 @@ async function share() {
     dark: props.dark,
     url: import.meta.client ? location.origin : undefined,
   })
+
+  const native = import.meta.client && canShareNatively(navigator.userAgent, !!navigator.share)
+
   try {
-    if (import.meta.client && navigator.share) {
+    if (native) {
       await navigator.share({ text })
+      outcome.value = 'shared'
     } else {
-      await navigator.clipboard.writeText(text)
-      toast.value = 'Copiado'
-      setTimeout(() => (toast.value = ''), 1600)
+      await copy(text)
+      outcome.value = 'copied'
     }
-    shared.value = true
-  } catch {
+  } catch (err) {
     /* usuário cancelou o share sheet — não é erro */
+    if ((err as Error)?.name === 'AbortError') return
+    /* share nativo falhou por outro motivo: ainda dá para copiar */
+    if (native) {
+      try {
+        await copy(text)
+        outcome.value = 'copied'
+      } catch {
+        toast.value = 'Não foi possível copiar'
+        setTimeout(() => (toast.value = ''), 1600)
+      }
+    }
   }
 }
 </script>
@@ -241,8 +303,12 @@ async function share() {
         <span class="next__label">Próxima palavra</span>
         <span class="next__clock">{{ remaining }}</span>
       </div>
-      <button type="button" class="share" @click="share">
-        {{ shared ? 'Compartilhado' : 'Compartilhar' }}
+      <!--
+        `aria-live` no próprio botão: quem usa leitor de tela está com o foco
+        nele, e a troca do rótulo é o único sinal de que copiou.
+      -->
+      <button type="button" class="share" aria-live="polite" @click="share">
+        {{ shareLabel }}
       </button>
     </div>
     <p v-if="toast" class="copied" role="status">{{ toast }}</p>
