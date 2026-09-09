@@ -83,6 +83,7 @@ function mulberry32(seed: number) {
 const BATCHES: { size: number; seed: number }[] = [
   { size: 69, seed: 20260817 }, // lançamento
   { size: 45, seed: 20260908 }, // segunda leva
+  { size: 40, seed: 20260909 }, // terceira leva
 ]
 
 const ORDER = (() => {

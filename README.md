@@ -153,8 +153,8 @@ pequeno, não só filete.
 
 ## Duas listas de palavras
 
-- `server/utils/words.ts` — as respostas, curadas, com definição. 114 termos ≈
-  quase quatro meses de jogo.
+- `server/utils/words.ts` — as respostas, curadas, com definição. 154 termos ≈
+  cinco meses de jogo.
 - `server/utils/pt-5.json` — os palpites válidos: ~19,6 mil palavras de 5 letras
   do dicionário Hunspell pt_BR (VERO/LibreOffice), com os afixos expandidos.
   Sem a expansão o jogador não conseguiria usar plural nem conjugação
