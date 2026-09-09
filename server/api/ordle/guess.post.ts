@@ -1,6 +1,6 @@
-import { answerFor, gameId, grade, normalize, MAX_ATTEMPTS, WORD_LENGTH } from '../../utils/ordle'
+import { answerFor, gameId, grade, isMode, normalize, MAX_ATTEMPTS } from '../../utils/ordle'
 import { isValidGuess } from '../../utils/dictionary'
-import { COOKIE_NAME, cookieOptions, seal, unseal, type Session } from '../../utils/session'
+import { cookieName, cookieOptions, seal, unseal, type Session } from '../../utils/session'
 import { rateLimit } from '../../utils/ratelimit'
 
 export default defineEventHandler(async (event) => {
@@ -8,32 +8,37 @@ export default defineEventHandler(async (event) => {
 
   const now = Date.now()
   const id = gameId(now)
-  const body = await readBody<{ guess?: string }>(event)
+  const body = await readBody<{ guess?: string; mode?: string }>(event)
+  const mode = isMode(body?.mode) ? body.mode : 'normal'
   const key = normalize(body?.guess ?? '')
+  const answer = answerFor(now, mode)
 
-  if (key.length !== WORD_LENGTH || !/^[A-Z]{5}$/.test(key))
+  // o comprimento aceito é o da palavra do dia — no difícil ele varia
+  if (key.length !== answer.key.length || !/^[A-Z]+$/.test(key))
     throw createError({ statusCode: 400, statusMessage: 'invalid_length' })
 
   // palavra desconhecida não consome tentativa
-  if (!isValidGuess(key)) throw createError({ statusCode: 422, statusMessage: 'unknown_word' })
+  if (!(await isValidGuess(key))) throw createError({ statusCode: 422, statusMessage: 'unknown_word' })
 
-  const prev = unseal(getCookie(event, COOKIE_NAME))
-  const s: Session = prev?.id === id ? prev : { id, guesses: [], status: 'playing' }
+  const cookie = cookieName(mode)
+  const prev = unseal(getCookie(event, cookie))
+  const s: Session =
+    prev?.id === id && prev.mode === mode ? prev : { id, guesses: [], status: 'playing', mode }
 
-  if (s.status !== 'playing' || s.guesses.length >= MAX_ATTEMPTS)
+  const max = MAX_ATTEMPTS[mode]
+  if (s.status !== 'playing' || s.guesses.length >= max)
     throw createError({ statusCode: 409, statusMessage: 'game_over' })
 
-  const answer = answerFor(now)
   s.guesses.push(key)
   if (key === answer.key) s.status = 'won'
-  else if (s.guesses.length >= MAX_ATTEMPTS) s.status = 'lost'
+  else if (s.guesses.length >= max) s.status = 'lost'
 
-  setCookie(event, COOKIE_NAME, seal(s), cookieOptions())
+  setCookie(event, cookie, seal(s), cookieOptions())
 
   return {
     result: grade(key, answer.key),
     status: s.status,
-    attemptsLeft: MAX_ATTEMPTS - s.guesses.length,
+    attemptsLeft: max - s.guesses.length,
     ...(s.status !== 'playing' && { answer: answer.word, definition: answer.definition }),
   }
 })

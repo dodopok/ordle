@@ -151,19 +151,56 @@ sempre. No tema escuro cada cor tem uma versão clara própria: as de tema claro
 viram texto ilegível sobre o fundo quase preto, e a cor agora pinta texto
 pequeno, não só filete.
 
-## Duas listas de palavras
+## As listas de palavras
 
-- `server/utils/words.ts` — as respostas, curadas, com definição. 154 termos ≈
-  cinco meses de jogo.
-- `server/utils/pt-5.json` — os palpites válidos: ~19,6 mil palavras de 5 letras
-  do dicionário Hunspell pt_BR (VERO/LibreOffice), com os afixos expandidos.
-  Sem a expansão o jogador não conseguiria usar plural nem conjugação
-  (`VELAS`, `REGRA`, `CASAS`) e o jogo ficaria insuportável.
+- `server/utils/words.ts` — as respostas do modo normal, curadas, com
+  definição. 154 termos de 5 letras ≈ cinco meses de jogo.
+- `server/utils/words-hard.ts` — as respostas do modo difícil: 69 termos de 6 a
+  8 letras, equilibrados entre os três comprimentos.
+- `server/utils/pt-{5,6,7,8}.json` — os palpites válidos, um arquivo por
+  comprimento: 19,6 mil palavras de 5 letras, 49,6 mil de 6, 100 mil de 7 e
+  169 mil de 8, do dicionário Hunspell pt_BR (VERO/LibreOffice), com os afixos
+  expandidos. Sem a expansão o jogador não conseguiria usar plural nem
+  conjugação (`VELAS`, `REGRA`, `CASAS`) e o jogo ficaria insuportável.
+
+Um arquivo por comprimento, e não um só: juntos são 3,2 MB para parsear em todo
+cold start, sendo que num dia o jogo usa dois tamanhos. `dictionary.ts` importa
+sob demanda — o import dinâmico vira chunk separado no build, então o dia que
+sorteia 6 letras nunca toca no arquivo de 8.
 
 O conjunto de palpites contém o de respostas — `dictionary.ts` insere as chaves
-de `words.ts` no Set, porque o Hunspell não conhece KYRIE nem AGNUS. Há teste
+das duas listas no Set, porque o Hunspell não conhece KYRIE nem AGNUS. Há teste
 para isso: é o tipo de bug que só aparece às 6h da manhã, quando a palavra do
 dia é impossível de digitar.
+
+## Modo difícil
+
+Um segundo jogo por dia, não um ajuste do primeiro: lista própria, ordem
+própria, cookie próprio e estatística própria. Liga e desliga no painel de
+estatísticas, e a escolha fica nas preferências — quem entrou no difícil volta
+nele.
+
+- **A palavra do dia define a largura do tabuleiro**, de 6 a 8 letras. Não há
+  número fixo: o comprimento é o da resposta, e por isso `/api/ordle/state`
+  devolve `wordLength` (sempre devolveu — o client é que ignorava e usava a
+  constante). A lista é equilibrada entre os três tamanhos, com teste, senão o
+  modo viraria "quase sempre 8 letras" e o tabuleiro nunca mudaria.
+- **7 tentativas**, contra 6 do normal: uma a mais para compensar as palavras
+  maiores, sem fazer a altura do tabuleiro variar com o sorteio do dia.
+- **`--ord-tile` é calculado no `.board`, não no `:root`.** Uma custom property
+  é substituída onde é definida, e no `:root` a conta enxergaria o
+  `--ord-cols: 5` do padrão em vez do 8 do dia — o tabuleiro sai com 522px de
+  largura numa tela de 390. Aconteceu; foi o navegador que pegou, não o teste
+  unitário.
+- **Um cookie por modo** (`ordle_s` e `ordle_h`), e não um cookie com os dois
+  tabuleiros: a partida normal em andamento no dia do deploy continua no mesmo
+  cookie, com o mesmo formato, sem migração. A sessão carrega o campo `mode`
+  porque os dois são assinados com a mesma chave — sem ele, colar o `ordle_s`
+  de uma partida ganha em `ordle_h` daria a vitória de graça no difícil.
+  Cookie antigo, sem o campo, vale como partida normal.
+- **Estatística separada**, inclusive a distribuição, que tem uma barra por
+  tentativa: fixá-la em 6 faria a vitória na 7ª incrementar posição inexistente
+  — `undefined + 1` é NaN, e o gráfico quebraria calado.
 
 ## Cor litúrgica
 

@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import {
-  MAX_ATTEMPTS,
   detectPlatform,
   shareText,
   type GameStatus,
   type Mark,
+  type Mode,
 } from '../../utils/ordle-shared'
 import type { Stats } from '../../composables/useOrdleStorage'
 
@@ -18,6 +18,7 @@ const COLOR_PT: Record<string, string> = {
 
 const props = defineProps<{
   gameNumber: number
+  mode: Mode
   status: GameStatus
   answer: string | null
   definition: string | null
@@ -138,6 +139,7 @@ async function share() {
     gameNumber: props.gameNumber,
     results: props.results,
     status: props.status,
+    mode: props.mode,
     dark: props.dark,
     url: import.meta.client ? location.origin : undefined,
   })

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useOrdle } from '../composables/useOrdle'
 import { useOrdleStorage, type Prefs } from '../composables/useOrdleStorage'
+import type { Mode } from '../utils/ordle-shared'
 
 // é um jogo: SEO não importa aqui, e localStorage não existe no SSR
 definePageMeta({ ssr: false })
@@ -37,15 +38,22 @@ useHead({
   ],
 })
 
-const { state, keys, type, backspace, submit, focusCell } = useOrdle()
 const storage = useOrdleStorage()
 
-// --- preferências --------------------------------------------------------
-const prefs = ref<Prefs>({ v: 1, theme: 'system', highContrast: false, sound: true })
+/*
+ * As preferências são lidas aqui no setup, e não no onMounted, por causa da
+ * ordem: `useOrdle` registra o próprio onMounted, que busca o estado do
+ * servidor. Se o modo só chegasse depois, quem joga no difícil veria o
+ * tabuleiro do normal aparecer e ser trocado. A página é `ssr: false`, então
+ * o localStorage já existe neste ponto.
+ */
+const prefs = ref<Prefs>(storage.loadPrefs())
+
+const { state, keys, type, backspace, submit, focusCell, setMode } = useOrdle(prefs.value.mode)
+
 const systemDark = ref(false)
 
 onMounted(() => {
-  prefs.value = storage.loadPrefs()
   const mq = window.matchMedia('(prefers-color-scheme: dark)')
   systemDark.value = mq.matches
   mq.addEventListener('change', (e) => (systemDark.value = e.matches))
@@ -71,7 +79,13 @@ const today = computed(() => {
   return `${d} ${MESES[m - 1]}`
 })
 
-const stats = computed(() => state.stats ?? storage.loadStats())
+const stats = computed(() => state.stats ?? storage.loadStats(state.mode))
+
+/** trocar de modo é escolha que persiste: quem entrou no difícil volta nele */
+function changeMode(mode: Mode) {
+  updatePrefs({ ...prefs.value, mode })
+  setMode(mode)
+}
 
 function openResult() {
   state.modal = state.status === 'playing' ? 'settings' : 'result'
@@ -91,8 +105,14 @@ function openResult() {
         <h1 class="hd__logo">Ordle</h1>
         <p class="hd__meta">
           <span class="hd__n">#{{ state.gameNumber }}</span>
-          <span aria-hidden="true"> · </span>
-          <span>{{ today }}</span>
+          <span class="hd__sep" aria-hidden="true"> · </span>
+          <span class="hd__date">{{ today }}</span>
+          <!-- o tabuleiro maior é pista, mas o rótulo tira a dúvida de quem
+               abriu a aba no dia seguinte sem lembrar em que modo estava -->
+          <template v-if="state.mode === 'hard'">
+            <span class="hd__sep" aria-hidden="true"> · </span>
+            <span class="hd__mode">difícil</span>
+          </template>
         </p>
         <div class="hd__actions">
           <button type="button" aria-label="Como jogar" @click="state.modal = 'help'">?</button>
@@ -103,6 +123,8 @@ function openResult() {
 
     <main class="main">
       <OrdleBoard
+        :word-length="state.wordLength"
+        :max-attempts="state.maxAttempts"
         :guesses="state.guesses"
         :results="state.results"
         :current="state.current"
@@ -138,13 +160,16 @@ function openResult() {
       v-else-if="state.modal === 'settings'"
       :stats="stats"
       :prefs="prefs"
+      :mode="state.mode"
       @update="updatePrefs"
+      @mode="changeMode"
       @close="state.modal = null"
     />
 
     <OrdleResultModal
       v-else-if="state.modal === 'result'"
       :game-number="state.gameNumber"
+      :mode="state.mode"
       :status="state.status"
       :answer="state.answer"
       :definition="state.definition"
@@ -186,6 +211,26 @@ function openResult() {
   max-width: 500px;
   margin: 0 auto;
   width: 100%;
+}
+
+/*
+ * Abaixo de 360px o cabeçalho não comporta número, data e modo na mesma
+ * linha — com o rótulo do modo, "#24 · 9 set · difícil" quebra em três linhas
+ * e empurra o tabuleiro. A data é o que sai: ela está no relógio do aparelho,
+ * o modo não está em lugar nenhum.
+ */
+@media (max-width: 359px) {
+  .hd__sep,
+  .hd__date { display: none; }
+  /* sem os separadores, "#24" e "difícil" caem em duas linhas limpas, sem
+     ponto medial pendurado no fim da primeira */
+  .hd__mode { display: block; }
+}
+
+.hd__mode {
+  /* na cor do dia, como o número: é rótulo de estado, não aviso */
+  color: var(--ord-accent);
+  font-weight: 600;
 }
 
 .hd__logo {

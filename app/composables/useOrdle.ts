@@ -1,9 +1,18 @@
-import { MAX_ATTEMPTS, WORD_LENGTH, keyboardState, normalize, type GameStatus, type Mark } from '../utils/ordle-shared'
+import {
+  DEFAULT_MAX_ATTEMPTS,
+  DEFAULT_WORD_LENGTH,
+  keyboardState,
+  normalize,
+  type GameStatus,
+  type Mark,
+  type Mode,
+} from '../utils/ordle-shared'
 import { useOrdleStorage, type Stats } from './useOrdleStorage'
 
 type StateResponse = {
   gameId: string
   gameNumber: number
+  mode: Mode
   wordLength: number
   maxAttempts: number
   guesses: string[]
@@ -26,14 +35,19 @@ type GuessResponse = {
   definition?: string
 }
 
-const emptyRow = () => Array<string>(WORD_LENGTH).fill('')
-
-export function useOrdle() {
+export function useOrdle(initialMode: Mode = 'normal') {
   const storage = useOrdleStorage()
 
   const state = reactive({
     gameId: '',
     gameNumber: 0,
+    mode: initialMode,
+    /**
+     * Comprimento e tentativas vêm do servidor, não de constante: no modo
+     * difícil a largura do tabuleiro é a da palavra do dia, de 6 a 8.
+     */
+    wordLength: DEFAULT_WORD_LENGTH,
+    maxAttempts: DEFAULT_MAX_ATTEMPTS,
     guesses: [] as string[],
     results: [] as Mark[][],
     /**
@@ -41,7 +55,7 @@ export function useOrdle() {
      * porque dá para clicar num quadrado e preencher fora de ordem — com
      * string não haveria como representar "___O_".
      */
-    current: Array<string>(WORD_LENGTH).fill(''),
+    current: Array<string>(DEFAULT_WORD_LENGTH).fill(''),
     cursor: 0,
     status: 'playing' as GameStatus,
     answer: null as string | null,
@@ -62,11 +76,13 @@ export function useOrdle() {
     rollover: false,
   })
 
+  const emptyRow = () => Array<string>(state.wordLength).fill('')
+
   const keys = computed(() => keyboardState(state.guesses, state.results))
   const canType = computed(() => state.status === 'playing' && !state.busy && state.modal === null)
 
   async function boot() {
-    const cached = storage.loadGame()
+    const cached = storage.loadGame(state.mode)
     if (cached) {
       // pinta na hora, sem esperar a rede
       Object.assign(state, {
@@ -81,11 +97,16 @@ export function useOrdle() {
     }
 
     try {
-      const server = await $fetch<StateResponse>('/api/ordle/state')
-      if (cached && cached.gameId !== server.gameId) storage.clearGame()
+      const server = await $fetch<StateResponse>('/api/ordle/state', {
+        query: { mode: state.mode },
+      })
+      if (cached && cached.gameId !== server.gameId) storage.clearGame(state.mode)
       Object.assign(state, {
         gameId: server.gameId,
         gameNumber: server.gameNumber,
+        mode: server.mode,
+        wordLength: server.wordLength,
+        maxAttempts: server.maxAttempts,
         guesses: server.guesses,
         results: server.results,
         status: server.status,
@@ -96,13 +117,14 @@ export function useOrdle() {
         liturgicalCelebration: server.liturgicalCelebration,
         liturgicalPsalm: server.liturgicalPsalm ?? null,
         nextRolloverAt: server.nextRolloverAt,
-        current: emptyRow(),
+        // depois de `wordLength`, que é quem dita o tamanho da linha
+        current: Array<string>(server.wordLength).fill(''),
         cursor: 0,
         rollover: false,
       })
-      storage.saveGame(state)
+      storage.saveGame(state.mode, state)
       if (state.status !== 'playing') {
-        state.stats = storage.recordResult(state)
+        state.stats = storage.recordResult(state.mode, state)
         state.modal = 'result'
       }
     } catch {
@@ -113,22 +135,49 @@ export function useOrdle() {
   }
 
   /**
+   * Troca de modo é partida diferente: zera o tabuleiro e busca o estado do
+   * outro jogo. O servidor guarda os dois em cookies separados, então voltar
+   * para o normal recupera a partida de lá do jeito que ela estava.
+   */
+  async function setMode(mode: Mode) {
+    if (mode === state.mode || state.busy) return
+    state.mode = mode
+    state.ready = false
+    Object.assign(state, {
+      guesses: [],
+      results: [],
+      current: emptyRow(),
+      cursor: 0,
+      status: 'playing' as GameStatus,
+      answer: null,
+      definition: null,
+      reveal: -1,
+      win: false,
+    })
+    // o modal aberto continua aberto: quem clicou no interruptor dentro das
+    // configurações vê a estatística trocar para a do outro modo, em vez de o
+    // painel sumir na cara. Se a partida do modo novo já acabou, o `boot`
+    // abre o resultado por cima, que é o certo.
+    await boot()
+  }
+
+  /**
    * Próxima célula vazia a partir de `from`, dando a volta na linha. Se a
    * linha estiver cheia, fica onde está — aí digitar sobrescreve, que é o
    * comportamento previsível de uma grade com cursor.
    */
   function nextEmpty(from: number): number {
-    for (let i = 0; i < WORD_LENGTH; i++) {
-      const idx = (from + i) % WORD_LENGTH
+    for (let i = 0; i < state.wordLength; i++) {
+      const idx = (from + i) % state.wordLength
       if (!state.current[idx]) return idx
     }
-    return Math.min(from, WORD_LENGTH - 1)
+    return Math.min(from, state.wordLength - 1)
   }
 
   /** Move o cursor para um quadrado específico (clique no tabuleiro). */
   function focusCell(index: number) {
     if (!canType.value) return
-    if (index < 0 || index >= WORD_LENGTH) return
+    if (index < 0 || index >= state.wordLength) return
     state.cursor = index
   }
 
@@ -153,8 +202,8 @@ export function useOrdle() {
       state.current[state.cursor] = ''
       return rewindIfEmpty()
     }
-    for (let i = 1; i <= WORD_LENGTH; i++) {
-      const idx = (state.cursor - i + WORD_LENGTH * 2) % WORD_LENGTH
+    for (let i = 1; i <= state.wordLength; i++) {
+      const idx = (state.cursor - i + state.wordLength * 2) % state.wordLength
       if (state.current[idx]) {
         state.current[idx] = ''
         state.cursor = idx
@@ -175,17 +224,17 @@ export function useOrdle() {
 
   function moveCursor(delta: number) {
     if (!canType.value) return
-    state.cursor = Math.min(WORD_LENGTH - 1, Math.max(0, state.cursor + delta))
+    state.cursor = Math.min(state.wordLength - 1, Math.max(0, state.cursor + delta))
   }
 
   async function submit() {
     if (!canType.value) return
-    if (state.guesses.length >= MAX_ATTEMPTS) return
+    if (state.guesses.length >= state.maxAttempts) return
 
     const guess = state.current.join('')
     // com preenchimento fora de ordem dá para deixar buraco no meio, então
     // não basta contar o tamanho: tem que checar célula por célula
-    if (guess.length < WORD_LENGTH) {
+    if (guess.length < state.wordLength) {
       state.cursor = nextEmpty(0)
       return bump('Faltam letras')
     }
@@ -194,7 +243,7 @@ export function useOrdle() {
     try {
       const r = await $fetch<GuessResponse>('/api/ordle/guess', {
         method: 'POST',
-        body: { guess },
+        body: { guess, mode: state.mode },
       })
       const row = state.guesses.length
       state.guesses.push(normalize(guess))
@@ -207,13 +256,13 @@ export function useOrdle() {
         state.answer = r.answer
         state.definition = r.definition ?? null
       }
-      storage.saveGame(state)
+      storage.saveGame(state.mode, state)
 
       // deixa o flip terminar antes de abrir o modal
-      const flipDone = WORD_LENGTH * 100 + 320
+      const flipDone = state.wordLength * 100 + 320
       if (state.status === 'won') setTimeout(() => (state.win = true), flipDone)
       if (state.status !== 'playing') {
-        state.stats = storage.recordResult(state)
+        state.stats = storage.recordResult(state.mode, state)
         setTimeout(() => (state.modal = 'result'), flipDone + 900)
       }
     } catch (e: any) {
@@ -280,5 +329,5 @@ export function useOrdle() {
     clearTimeout(shakeTimer)
   })
 
-  return { state, keys, type, backspace, submit, bump, boot, focusCell, moveCursor }
+  return { state, keys, type, backspace, submit, bump, boot, focusCell, moveCursor, setMode }
 }

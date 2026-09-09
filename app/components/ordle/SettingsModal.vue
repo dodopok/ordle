@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import type { Mode } from '../../utils/ordle-shared'
 import type { Prefs, Stats } from '../../composables/useOrdleStorage'
 
-const props = defineProps<{ stats: Stats; prefs: Prefs }>()
+const props = defineProps<{ stats: Stats; prefs: Prefs; mode: Mode }>()
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'update', prefs: Prefs): void
+  (e: 'mode', mode: Mode): void
 }>()
 
 const winRate = computed(() =>
@@ -15,7 +17,7 @@ const set = (patch: Partial<Prefs>) => emit('update', { ...props.prefs, ...patch
 </script>
 
 <template>
-  <OrdleModal title="Estatísticas" @close="emit('close')">
+  <OrdleModal :title="mode === 'hard' ? 'Estatísticas (difícil)' : 'Estatísticas'" @close="emit('close')">
     <div class="stats">
       <div><b>{{ stats.played }}</b><span>jogos</span></div>
       <div><b>{{ winRate }}%</b><span>vitórias</span></div>
@@ -24,6 +26,23 @@ const set = (patch: Partial<Prefs>) => emit('update', { ...props.prefs, ...patch
     </div>
 
     <h3 class="sub">Preferências</h3>
+
+    <!--
+      O modo difícil é outro jogo, não um ajuste do mesmo: outra palavra, outro
+      tabuleiro e outra estatística. Por isso o rótulo diz o que muda, e a
+      sequência mostrada acima acompanha o modo em que a pessoa está.
+    -->
+    <label class="row">
+      <span>
+        Modo difícil
+        <small>Palavras de 6 a 8 letras, em 7 tentativas. Sequência própria</small>
+      </span>
+      <input
+        type="checkbox"
+        :checked="mode === 'hard'"
+        @change="emit('mode', ($event.target as HTMLInputElement).checked ? 'hard' : 'normal')"
+      />
+    </label>
 
     <label class="row">
       <span>Tema</span>

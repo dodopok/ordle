@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Regra de ouro da §4: nada de `server/utils/words.ts` pode chegar ao client.
+ * Regra de ouro da §4: nada das listas de respostas pode chegar ao client.
  *
  * Roda depois de `nuxt build` e varre a saída estática atrás de qualquer chave
  * de resposta, de qualquer definição e do dicionário de palpites. Sai com
@@ -32,8 +32,11 @@ const files = dirs.flatMap(walk)
 
 const bundles = files.map((f) => ({ f, text: readFileSync(f, 'latin1') }))
 
-const source = readFileSync('server/utils/words.ts', 'utf8')
-const keys = [...source.matchAll(/key: '([A-Z]{5})'/g)].map((m) => m[1])
+// as duas listas de respostas: a do modo normal e a do difícil
+const SOURCES = ['server/utils/words.ts', 'server/utils/words-hard.ts']
+const source = SOURCES.map((f) => readFileSync(f, 'utf8')).join('\n')
+// {5,8}: o difícil tem chaves de 6 a 8 letras
+const keys = [...source.matchAll(/key: '([A-Z]{5,8})'/g)].map((m) => m[1])
 const definitions = [...source.matchAll(/definition: '([^']{12,40})/g)].map((m) => m[1])
 
 const findings = []
