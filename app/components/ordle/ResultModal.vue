@@ -105,7 +105,18 @@ const ordoLabel = computed(() =>
 
 const emit = defineEmits<{ (e: 'close'): void }>()
 
-const shared = ref(false)
+/**
+ * O que aconteceu de fato, e não só se aconteceu: no Windows o botão copia, e
+ * dizer "Compartilhado" ali prometeria um envio que não houve — a pessoa fica
+ * esperando uma janela que nunca vem, em vez de ir colar o texto.
+ */
+const outcome = ref<'idle' | 'shared' | 'copied'>('idle')
+
+const shareLabel = computed(() =>
+  outcome.value === 'shared' ? 'Compartilhado' : outcome.value === 'copied' ? 'Copiado' : 'Compartilhar',
+)
+
+/** só para o que dá errado; o sucesso já está escrito no botão */
 const toast = ref('')
 
 const winRate = computed(() =>
@@ -160,8 +171,6 @@ async function copy(text: string) {
   } catch {
     if (!copyFallback(text)) throw new Error('clipboard indisponível')
   }
-  toast.value = 'Copiado'
-  setTimeout(() => (toast.value = ''), 1600)
 }
 
 /**
@@ -187,10 +196,11 @@ async function share() {
   try {
     if (native) {
       await navigator.share({ text })
+      outcome.value = 'shared'
     } else {
       await copy(text)
+      outcome.value = 'copied'
     }
-    shared.value = true
   } catch (err) {
     /* usuário cancelou o share sheet — não é erro */
     if ((err as Error)?.name === 'AbortError') return
@@ -198,7 +208,7 @@ async function share() {
     if (native) {
       try {
         await copy(text)
-        shared.value = true
+        outcome.value = 'copied'
       } catch {
         toast.value = 'Não foi possível copiar'
         setTimeout(() => (toast.value = ''), 1600)
@@ -266,8 +276,12 @@ async function share() {
         <span class="next__label">Próxima palavra</span>
         <span class="next__clock">{{ remaining }}</span>
       </div>
-      <button type="button" class="share" @click="share">
-        {{ shared ? 'Compartilhado' : 'Compartilhar' }}
+      <!--
+        `aria-live` no próprio botão: quem usa leitor de tela está com o foco
+        nele, e a troca do rótulo é o único sinal de que copiou.
+      -->
+      <button type="button" class="share" aria-live="polite" @click="share">
+        {{ shareLabel }}
       </button>
     </div>
     <p v-if="toast" class="copied" role="status">{{ toast }}</p>
