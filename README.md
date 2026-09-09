@@ -137,7 +137,11 @@ link de WhatsApp aberto no celular, então:
   partida não pode recarregar o jogo.
 - O tile é limitado pela largura **e** pela altura: `--ord-chrome` (header +
   teclado + folgas, medidos no browser) sai de 100dvh antes da divisão, com os
-  5 gaps descontados. Sem isso o teclado sai da tela em aparelho baixo.
+  gaps descontados. Sem isso o teclado sai da tela em aparelho baixo — e isso
+  não é hipótese: quando a fileira dos dois jogos entrou no cabeçalho, ele
+  cresceu 32px e o teclado saiu da tela em 320x568, 360x640 e 375x667 no modo
+  normal, com os valores antigos. Quem mexer na altura do header remede as
+  quatro faixas.
 - Deitado, tabuleiro e teclado vão lado a lado — 6 fileiras mais o teclado não
   cabem em 390px de altura, e encolher até caber daria tile de 23px.
 - Alvos de toque de 44px, feedback no `:active` (no touch não existe hover),
@@ -181,8 +185,9 @@ própria, cookie próprio e estatística própria.
 **Dá para jogar os dois no mesmo dia**, em qualquer ordem — não é escolher um.
 Por isso o seletor é um par de botões "Normal | Difícil" (com ✓ no que já
 acabou), e não uma caixinha de "modo difícil": caixinha se lê como "ou um, ou
-outro". Ele fica acima do título Preferências, porque não é preferência — é
-qual dos dois jogos está aberto. O convite natural, porém, é o fim da partida:
+outro". Ele mora **no cabeçalho**, numa fileira própria abaixo da barra: é
+navegação entre duas partidas, e o segundo jogo precisa ser visível para
+existir. O outro convite é o fim da partida:
 a tela de resultado traz "Jogar o difícil de hoje →", que vira "Ver o normal de
 hoje →" depois que os dois acabaram. Essa linha existe sempre, e não só quando
 falta jogar: com a partida encerrada o botão ▤ abre o resultado e não as

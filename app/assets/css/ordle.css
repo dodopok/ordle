@@ -39,19 +39,21 @@
    */
   --ord-cols: 5;
   --ord-rows: 6;
-  /* medidos no browser, não estimados: header 68px + teclado + padding do
-     tabuleiro, em cada faixa de altura */
-  --ord-chrome: 18rem;
+  /* medidos no browser, não estimados: header (68px da barra + 32px da fileira
+     dos dois jogos) + teclado + padding do tabuleiro, em cada faixa de altura.
+     Quem mexer na altura do header remede isto: com o valor antigo, o teclado
+     sai da tela em 375x667 no modo normal — o tile cresce para 60px e empurra. */
+  --ord-chrome: 20rem;
   --ord-gap: 6px;
   /* --ord-tile é calculado no .board, logo abaixo, e não aqui: ver o porquê lá */
 }
 
 @media (max-height: 700px) {
-  :root { --ord-chrome: 16.5rem; }
+  :root { --ord-chrome: 18.5rem; }
 }
 
 @media (max-height: 560px) {
-  :root { --ord-chrome: 14.75rem; --ord-gap: 4px; }
+  :root { --ord-chrome: 16.75rem; --ord-gap: 4px; }
 }
 
 /*
@@ -61,7 +63,7 @@
  */
 @media (orientation: landscape) and (max-height: 560px) {
   /* aqui o teclado sai de baixo do tabuleiro, então o cromo é só o header */
-  :root { --ord-chrome: 6.5rem; }
+  :root { --ord-chrome: 8.5rem; }
 }
 
 /*

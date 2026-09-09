@@ -131,20 +131,42 @@ function openResult() {
         <h1 class="hd__logo">Ordle</h1>
         <p class="hd__meta">
           <span class="hd__n">#{{ state.gameNumber }}</span>
-          <span class="hd__sep" aria-hidden="true"> · </span>
-          <span class="hd__date">{{ today }}</span>
-          <!-- o tabuleiro maior é pista, mas o rótulo tira a dúvida de quem
-               abriu a aba no dia seguinte sem lembrar em que modo estava -->
-          <template v-if="state.mode === 'hard'">
-            <span class="hd__sep" aria-hidden="true"> · </span>
-            <span class="hd__mode">difícil</span>
-          </template>
+          <span aria-hidden="true"> · </span>
+          <span>{{ today }}</span>
         </p>
         <div class="hd__actions">
           <button type="button" aria-label="Como jogar" @click="state.modal = 'help'">?</button>
           <button type="button" aria-label="Estatísticas" @click="openResult">▤</button>
         </div>
       </div>
+
+      <!--
+        Os dois jogos do dia ficam aqui, e não escondidos nas configurações:
+        são duas partidas independentes, e quem abre o jogo tem que ver que a
+        segunda existe. O ✓ diz qual já acabou hoje.
+
+        A fileira custa altura, e altura no celular sai do tile — por isso ela
+        é compacta e `--ord-chrome` foi remedido em cada faixa depois de a
+        fileira existir, não estimado.
+      -->
+      <nav class="hd__modes" aria-label="Jogo de hoje">
+        <button
+          type="button"
+          :class="{ 'is-on': state.mode === 'normal' }"
+          :aria-pressed="state.mode === 'normal'"
+          @click="changeMode('normal')"
+        >
+          Normal<span v-if="doneToday.normal" aria-label="já jogado"> ✓</span>
+        </button>
+        <button
+          type="button"
+          :class="{ 'is-on': state.mode === 'hard' }"
+          :aria-pressed="state.mode === 'hard'"
+          @click="changeMode('hard')"
+        >
+          Difícil<span v-if="doneToday.hard" aria-label="já jogado"> ✓</span>
+        </button>
+      </nav>
     </header>
 
     <main class="main">
@@ -187,9 +209,7 @@ function openResult() {
       :stats="stats"
       :prefs="prefs"
       :mode="state.mode"
-      :done="doneToday"
       @update="updatePrefs"
-      @mode="changeMode"
       @close="state.modal = null"
     />
 
@@ -243,23 +263,44 @@ function openResult() {
 }
 
 /*
- * Abaixo de 360px o cabeçalho não comporta número, data e modo na mesma
- * linha — com o rótulo do modo, "#24 · 9 set · difícil" quebra em três linhas
- * e empurra o tabuleiro. A data é o que sai: ela está no relógio do aparelho,
- * o modo não está em lugar nenhum.
+ * A fileira dos dois jogos: filete embaixo e nada de fundo, para não virar
+ * outra barra. O jogo aberto é sublinhado na cor do dia — a mesma linguagem do
+ * filete do topo, e não um botão pintado, que competiria com as cores do
+ * tabuleiro.
  */
-@media (max-width: 359px) {
-  .hd__sep,
-  .hd__date { display: none; }
-  /* sem os separadores, "#24" e "difícil" caem em duas linhas limpas, sem
-     ponto medial pendurado no fim da primeira */
-  .hd__mode { display: block; }
+.hd__modes {
+  display: flex;
+  justify-content: center;
+  gap: 0.25rem;
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 0 max(0.875rem, env(safe-area-inset-left));
 }
 
-.hd__mode {
-  /* na cor do dia, como o número: é rótulo de estado, não aviso */
-  color: var(--ord-accent);
+.hd__modes button {
+  font: inherit;
+  font-family: var(--ord-ui);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.4375rem 0.875rem;
+  min-height: 2rem; /* alvo de toque sem inflar o cromo */
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--ord-muted);
+  cursor: pointer;
+}
+
+.hd__modes button.is-on {
+  color: var(--ord-ink);
+  border-bottom-color: var(--ord-accent);
   font-weight: 600;
+}
+
+.hd__modes button:focus-visible {
+  outline: 2px solid var(--ord-accent);
+  outline-offset: -2px;
 }
 
 .hd__logo {

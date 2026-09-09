@@ -2,17 +2,10 @@
 import type { Mode } from '../../utils/ordle-shared'
 import type { Prefs, Stats } from '../../composables/useOrdleStorage'
 
-const props = defineProps<{
-  stats: Stats
-  prefs: Prefs
-  mode: Mode
-  /** quais dos dois jogos de hoje já foram encerrados */
-  done: Record<Mode, boolean>
-}>()
+const props = defineProps<{ stats: Stats; prefs: Prefs; mode: Mode }>()
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'update', prefs: Prefs): void
-  (e: 'mode', mode: Mode): void
 }>()
 
 const winRate = computed(() =>
@@ -29,40 +22,6 @@ const set = (patch: Partial<Prefs>) => emit('update', { ...props.prefs, ...patch
       <div><b>{{ winRate }}%</b><span>vitórias</span></div>
       <div><b>{{ stats.streak }}</b><span>sequência</span></div>
       <div><b>{{ stats.maxStreak }}</b><span>recorde</span></div>
-    </div>
-
-    <!--
-      Dois jogos por dia, não um interruptor de preferência: dá para jogar os
-      dois, em qualquer ordem, e cada um guarda a própria partida e a própria
-      sequência. Por isso são dois botões lado a lado e não uma caixinha de
-      "modo difícil" — caixinha se lê como "ou um, ou outro".
-
-      O ✓ diz qual já foi encerrado hoje, que é a pergunta de quem volta ao
-      jogo à noite sem lembrar se jogou o segundo.
-    -->
-    <div class="row">
-      <span>
-        Jogo de hoje
-        <small>Difícil: 6 a 8 letras, 7 tentativas, sequência própria</small>
-      </span>
-      <div class="seg" role="group" aria-label="Escolher o jogo de hoje">
-        <button
-          type="button"
-          :class="{ 'is-on': mode === 'normal' }"
-          :aria-pressed="mode === 'normal'"
-          @click="emit('mode', 'normal')"
-        >
-          Normal<span v-if="done.normal" aria-label="já jogado"> ✓</span>
-        </button>
-        <button
-          type="button"
-          :class="{ 'is-on': mode === 'hard' }"
-          :aria-pressed="mode === 'hard'"
-          @click="emit('mode', 'hard')"
-        >
-          Difícil<span v-if="done.hard" aria-label="já jogado"> ✓</span>
-        </button>
-      </div>
     </div>
 
     <h3 class="sub">Preferências</h3>
@@ -128,20 +87,4 @@ const set = (patch: Partial<Prefs>) => emit('update', { ...props.prefs, ...patch
 .row select { font: inherit; padding: 0.25rem; background: var(--ord-bg); color: inherit; border: 1px solid var(--ord-rule); border-radius: 4px; }
 .row input[type='checkbox'] { width: 1.125rem; height: 1.125rem; accent-color: var(--ord-accent); }
 
-.seg { display: flex; border: 1px solid var(--ord-rule); border-radius: 4px; overflow: hidden; flex: none; }
-.seg button {
-  font: inherit;
-  font-size: 0.8125rem;
-  padding: 0.375rem 0.625rem;
-  min-height: 2.25rem; /* alvo de toque */
-  background: var(--ord-bg);
-  color: var(--ord-muted);
-  border: 0;
-  cursor: pointer;
-}
-.seg button + button { border-left: 1px solid var(--ord-rule); }
-.seg button.is-on { background: var(--ord-accent); color: #fff; font-weight: 600; }
-
-.credit { margin: 1.25rem 0 0; font-size: 0.8125rem; color: var(--ord-muted); text-align: center; }
-.credit a { color: var(--ord-accent); }
 </style>
