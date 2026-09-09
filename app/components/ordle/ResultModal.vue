@@ -133,6 +133,45 @@ onMounted(() => {
 onBeforeUnmount(() => clearInterval(timer))
 
 // --- compartilhar --------------------------------------------------------
+
+/**
+ * Cópia manual para quando `navigator.clipboard` não existe ou é negado —
+ * contexto inseguro (http://…), navegador antigo, permissão bloqueada.
+ */
+function copyFallback(text: string) {
+  const el = document.createElement('textarea')
+  el.value = text
+  el.setAttribute('readonly', '')
+  el.style.position = 'fixed'
+  el.style.opacity = '0'
+  document.body.appendChild(el)
+  el.select()
+  try {
+    return document.execCommand('copy')
+  } finally {
+    document.body.removeChild(el)
+  }
+}
+
+async function copy(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    if (!copyFallback(text)) throw new Error('clipboard indisponível')
+  }
+  toast.value = 'Copiado'
+  setTimeout(() => (toast.value = ''), 1600)
+}
+
+/**
+ * O share sheet nativo só vale no celular.
+ *
+ * No Windows o `navigator.share` existe (Chrome e Edge), mas abre a folha de
+ * compartilhamento do sistema — que trava no spinner com frequência, e cuja
+ * promessa não rejeita enquanto isso. O usuário fica preso numa caixa que não
+ * é nossa e o fallback de copiar nunca roda. No desktop, então, copiamos
+ * direto: é o gesto que a pessoa ia fazer de qualquer jeito.
+ */
 async function share() {
   const text = shareText({
     gameNumber: props.gameNumber,
@@ -141,17 +180,29 @@ async function share() {
     dark: props.dark,
     url: import.meta.client ? location.origin : undefined,
   })
+
+  const native = platform !== 'desktop' && import.meta.client && !!navigator.share
+
   try {
-    if (import.meta.client && navigator.share) {
+    if (native) {
       await navigator.share({ text })
     } else {
-      await navigator.clipboard.writeText(text)
-      toast.value = 'Copiado'
-      setTimeout(() => (toast.value = ''), 1600)
+      await copy(text)
     }
     shared.value = true
-  } catch {
+  } catch (err) {
     /* usuário cancelou o share sheet — não é erro */
+    if ((err as Error)?.name === 'AbortError') return
+    /* share nativo falhou por outro motivo: ainda dá para copiar */
+    if (native) {
+      try {
+        await copy(text)
+        shared.value = true
+      } catch {
+        toast.value = 'Não foi possível copiar'
+        setTimeout(() => (toast.value = ''), 1600)
+      }
+    }
   }
 }
 </script>
