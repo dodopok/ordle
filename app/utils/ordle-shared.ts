@@ -23,6 +23,20 @@ export function detectPlatform(ua: string, maxTouchPoints = 0): Platform {
   return 'desktop'
 }
 
+/**
+ * Se dá para entregar o resultado ao share sheet do sistema.
+ *
+ * O Windows é a exceção, e por isso a checagem não é o simples
+ * `!!navigator.share`: Chrome e Edge expõem a API lá, mas ela abre a folha de
+ * compartilhamento do Windows, que trava no spinner com frequência — e a
+ * promessa não rejeita enquanto isso, então nem dá para cair no copiar. Mac,
+ * iOS e Android têm folha nativa que funciona; Linux não expõe a API e cai no
+ * `hasShare` falso.
+ */
+export function canShareNatively(ua: string, hasShare: boolean): boolean {
+  return hasShare && !/windows|win32|win64/i.test(ua)
+}
+
 export const WORD_LENGTH = 5
 export const MAX_ATTEMPTS = 6
 
