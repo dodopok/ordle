@@ -176,9 +176,25 @@ dia é impossível de digitar.
 ## Modo difícil
 
 Um segundo jogo por dia, não um ajuste do primeiro: lista própria, ordem
-própria, cookie próprio e estatística própria. Liga e desliga no painel de
-estatísticas, e a escolha fica nas preferências — quem entrou no difícil volta
-nele.
+própria, cookie próprio e estatística própria.
+
+**Dá para jogar os dois no mesmo dia**, em qualquer ordem — não é escolher um.
+Por isso o seletor é um par de botões "Normal | Difícil" (com ✓ no que já
+acabou), e não uma caixinha de "modo difícil": caixinha se lê como "ou um, ou
+outro". Ele fica acima do título Preferências, porque não é preferência — é
+qual dos dois jogos está aberto. O convite natural, porém, é o fim da partida:
+a tela de resultado traz "Jogar o difícil de hoje →", que vira "Ver o normal de
+hoje →" depois que os dois acabaram. Essa linha existe sempre, e não só quando
+falta jogar: com a partida encerrada o botão ▤ abre o resultado e não as
+configurações, então sem ela quem jogou os dois não teria como voltar ao outro
+tabuleiro. O texto do compartilhar diz de qual se trata: "Acertei o Ordle #24
+no difícil de primeira!".
+
+**A estreia é ancorada.** `HARD_DEBUT` é o jogo #N em que o modo entrou no ar,
+e o índice desconta isso. Sem ele o difícil abriria na 24ª palavra do próprio
+embaralhamento — nada se perderia, porque o ciclo passa por todas, mas a lista
+curada estrearia girada. Vale a mesma regra do `LAUNCH`: mexer só antes de ir
+ao ar, para casar com o dia do deploy.
 
 - **A palavra do dia define a largura do tabuleiro**, de 6 a 8 letras. Não há
   número fixo: o comprimento é o da resposta, e por isso `/api/ordle/state`

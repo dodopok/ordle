@@ -130,8 +130,24 @@ const order = (mode: Mode) => {
 
 const ORDERS: Record<Mode, number[]> = { normal: order('normal'), hard: order('hard') }
 
+/**
+ * O jogo #N em que o modo difícil estreia.
+ *
+ * Sem isto o difícil entraria no meio da própria lista: o índice é o mesmo
+ * contador de dias do normal, então no dia #24 ele abriria na 24ª palavra do
+ * embaralhamento e a primeira só apareceria 45 dias depois. Nada se perderia
+ * (o ciclo passa por todas), mas a lista curada estrearia girada.
+ *
+ * ⚠️  Mesma regra do LAUNCH: dá para mexer ANTES de o modo entrar no ar, para
+ *     casar com o dia do deploy. Depois, não — mudar isto troca a palavra do
+ *     dia no difícil e invalida as partidas em andamento.
+ */
+const HARD_DEBUT = 24
+
 export function answerFor(now: number = Date.now(), mode: Mode = 'normal'): Entry {
-  const n = gameNumber(now)
+  // no difícil o dia da estreia serve a primeira palavra da lista, como o #1
+  // faz no normal — daí o deslocamento
+  const n = mode === 'hard' ? gameNumber(now) - HARD_DEBUT + 1 : gameNumber(now)
   const ord = ORDERS[mode]
   return LISTS[mode][ord[((n % ord.length) + ord.length) % ord.length]]
 }

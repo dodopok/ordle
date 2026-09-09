@@ -81,10 +81,36 @@ const today = computed(() => {
 
 const stats = computed(() => state.stats ?? storage.loadStats(state.mode))
 
-/** trocar de modo é escolha que persiste: quem entrou no difícil volta nele */
+/**
+ * Quais dos dois jogos de hoje já acabaram. Sai do localStorage, que guarda uma
+ * partida por modo — não precisa de ida ao servidor, e o jogo funciona offline
+ * depois do primeiro carregamento.
+ */
+const doneToday = computed<Record<Mode, boolean>>(() => {
+  const check = (m: Mode) => {
+    if (m === state.mode) return state.status !== 'playing'
+    const g = storage.loadGame(m)
+    return !!g && g.gameId === state.gameId && g.status !== 'playing'
+  }
+  // gameId no fecho: a virada do dia zera os dois
+  return { normal: check('normal'), hard: check('hard') }
+})
+
+/** o outro jogo do dia, para o convite no fim da partida */
+const otherDone = computed(() =>
+  state.mode === 'normal' ? doneToday.value.hard : doneToday.value.normal,
+)
+
+/** trocar de jogo persiste: quem estava no difícil reabre nele */
 function changeMode(mode: Mode) {
   updatePrefs({ ...prefs.value, mode })
   setMode(mode)
+}
+
+/** convite do fim de partida: fecha o resultado e abre o outro jogo */
+function switchToOther() {
+  state.modal = null
+  changeMode(state.mode === 'normal' ? 'hard' : 'normal')
 }
 
 function openResult() {
@@ -161,6 +187,7 @@ function openResult() {
       :stats="stats"
       :prefs="prefs"
       :mode="state.mode"
+      :done="doneToday"
       @update="updatePrefs"
       @mode="changeMode"
       @close="state.modal = null"
@@ -181,6 +208,8 @@ function openResult() {
       :color="state.liturgicalColor"
       :psalm="state.liturgicalPsalm"
       :dark="dark"
+      :other-done="otherDone"
+      @switch="switchToOther"
       @close="state.modal = null"
     />
   </div>

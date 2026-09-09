@@ -268,6 +268,22 @@ describe('modo difícil', () => {
     expect(new Set(keys).size).toBe(WORDS_HARD.length)
   })
 
+  it('a estreia serve a primeira palavra da lista, não o meio dela', () => {
+    // sem a âncora HARD_DEBUT o índice seria o mesmo contador de dias do
+    // normal, e o modo estrearia na 24ª palavra do embaralhamento — nada se
+    // perderia, mas a lista curada entraria girada
+    expect(answerFor(at('2026-09-09'), 'hard').word).toBe('CUSTÓDIA')
+  })
+
+  it('a partir da estreia, o ciclo passa por todas as palavras', () => {
+    const debut = at('2026-09-09')
+    const keys = Array.from(
+      { length: WORDS_HARD.length },
+      (_, i) => answerFor(debut + i * 86_400_000, 'hard').key,
+    )
+    expect(new Set(keys).size).toBe(WORDS_HARD.length)
+  })
+
   it('o modo normal é o padrão de answerFor', () => {
     expect(answerFor(at('2026-08-17')).key).toBe(answerFor(at('2026-08-17'), 'normal').key)
   })
