@@ -1,9 +1,21 @@
 import { WORDS, type Entry } from './words'
+import { WORDS_HARD } from './words-hard'
 
 export type Mark = 'correct' | 'present' | 'absent'
 
-export const WORD_LENGTH = 5
-export const MAX_ATTEMPTS = 6
+/**
+ * Dois jogos por dia, não um jogo com um ajuste. Cada modo tem lista, ordem,
+ * cookie e estatística próprios — o difícil não é o normal com menos ajuda.
+ */
+export type Mode = 'normal' | 'hard'
+export const isMode = (v: unknown): v is Mode => v === 'normal' || v === 'hard'
+
+/**
+ * 7 no difícil, contra 6 no normal: uma tentativa a mais para compensar as
+ * palavras maiores, sem fazer o tabuleiro mudar de altura conforme o dia
+ * (o que aconteceria se as tentativas acompanhassem o comprimento).
+ */
+export const MAX_ATTEMPTS: Record<Mode, number> = { normal: 6, hard: 7 }
 
 /**
  * Dia 1 do jogo — a data de lançamento, não um marco arbitrário.
@@ -51,7 +63,7 @@ export const normalize = (s: string) =>
     .toUpperCase()
     .trim()
 
-// embaralha uma vez, com seed fixa, pra ordem não ser a do array
+// embaralha com seed fixa, pra ordem não ser a do array
 function mulberry32(seed: number) {
   return () => {
     seed |= 0
@@ -62,19 +74,82 @@ function mulberry32(seed: number) {
   }
 }
 
-const ORDER = (() => {
-  const rand = mulberry32(20260817)
-  const idx = WORDS.map((_, i) => i)
-  for (let i = idx.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1))
-    ;[idx[i], idx[j]] = [idx[j], idx[i]]
-  }
-  return idx
-})()
+/**
+ * Lotes das listas de respostas — a ordem é **estável por prefixo**.
+ *
+ * ⚠️  NÃO REEMBARALHE UMA LISTA INTEIRA COM O JOGO NO AR. Embaralhar tudo de
+ *     novo (que é o que acontece se você só acrescentar palavras a uma
+ *     permutação única) troca a resposta de dias já jogados — o "#7" que
+ *     alguém compartilhou passa a apontar para outra palavra — e, se pegar o
+ *     dia corrente, invalida as partidas em andamento.
+ *
+ * Por isso o embaralhamento é feito em lotes: cada lote é embaralhado só entre
+ * si e concatenado no fim, então acrescentar palavras nunca mexe no que já foi
+ * sorteado. Como `answerFor` indexa por `n % ORDER.length`, o ciclo apenas
+ * fica mais longo: os dias de hoje até o fim do lote atual continuam iguais.
+ *
+ * Para acrescentar palavras: escreva as entradas novas **no fim** da lista do
+ * modo e abra um lote novo aqui, com a quantidade e uma seed própria. Nunca
+ * mexa num lote fechado nem intercale palavra no meio da lista.
+ */
+const BATCHES: Record<Mode, { size: number; seed: number }[]> = {
+  normal: [
+    { size: 69, seed: 20260817 }, // lançamento
+    { size: 45, seed: 20260908 }, // segunda leva
+    { size: 40, seed: 20260909 }, // terceira leva
+  ],
+  hard: [
+    { size: 69, seed: 20260910 }, // estreia do modo difícil
+  ],
+}
 
-export function answerFor(now: number = Date.now()): Entry {
-  const n = gameNumber(now)
-  return WORDS[ORDER[((n % ORDER.length) + ORDER.length) % ORDER.length]]
+const LISTS: Record<Mode, Entry[]> = { normal: WORDS, hard: WORDS_HARD }
+
+const order = (mode: Mode) => {
+  const total = BATCHES[mode].reduce((n, b) => n + b.size, 0)
+  if (total !== LISTS[mode].length) {
+    // fail-closed: sobrando, a palavra nova nunca sairia; faltando, o índice
+    // estoura e `answerFor` devolve undefined no meio da madrugada
+    throw new Error(
+      `ordle: BATCHES.${mode} soma ${total} mas a lista tem ${LISTS[mode].length} — abra um lote novo em vez de esticar um fechado`,
+    )
+  }
+
+  const out: number[] = []
+  for (const { size, seed } of BATCHES[mode]) {
+    const rand = mulberry32(seed)
+    const idx = Array.from({ length: size }, (_, i) => out.length + i)
+    for (let i = idx.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1))
+      ;[idx[i], idx[j]] = [idx[j], idx[i]]
+    }
+    out.push(...idx)
+  }
+  return out
+}
+
+const ORDERS: Record<Mode, number[]> = { normal: order('normal'), hard: order('hard') }
+
+/**
+ * O jogo #N em que o modo difícil estreia.
+ *
+ * Sem isto o difícil entraria no meio da própria lista: o índice é o mesmo
+ * contador de dias do normal, então no dia #24 ele abriria na 24ª palavra do
+ * embaralhamento e a primeira só apareceria 45 dias depois. Nada se perderia
+ * (o ciclo passa por todas), mas a lista curada estrearia girada.
+ *
+ * ⚠️  Mesma regra do LAUNCH: dá para mexer ANTES de o modo entrar no ar, para
+ *     casar com o dia do deploy. Depois, não — mudar isto troca a palavra do
+ *     dia no difícil e invalida as partidas em andamento.
+ */
+const HARD_DEBUT = 24
+
+export function answerFor(now: number = Date.now(), mode: Mode = 'normal'): Entry {
+  // no difícil o dia da estreia serve a primeira palavra da lista, como o #1
+  // faz no normal — daí o deslocamento
+  const n = mode === 'hard' ? gameNumber(now) - HARD_DEBUT + 1 : gameNumber(now)
+  const ord = ORDERS[mode]
+  return LISTS[mode][ord[((n % ord.length) + ord.length) % ord.length]]
 }
 
 /**
@@ -82,17 +157,19 @@ export function answerFor(now: number = Date.now()): Entry {
  * resposta SALMO, palpite SALSA → o segundo S tem que sair cinza, não amarelo.
  */
 export function grade(guessKey: string, answerKey: string): Mark[] {
-  const out: Mark[] = Array(WORD_LENGTH).fill('absent')
+  // o comprimento sai da resposta do dia: no modo difícil ele varia de 6 a 8
+  const len = answerKey.length
+  const out: Mark[] = Array(len).fill('absent')
   const pool: Record<string, number> = {}
 
   // passe 1: acertos exatos
-  for (let i = 0; i < WORD_LENGTH; i++) {
+  for (let i = 0; i < len; i++) {
     if (guessKey[i] === answerKey[i]) out[i] = 'correct'
     else pool[answerKey[i]] = (pool[answerKey[i]] ?? 0) + 1
   }
 
   // passe 2: presentes, consumindo o que sobrou
-  for (let i = 0; i < WORD_LENGTH; i++) {
+  for (let i = 0; i < len; i++) {
     if (out[i] === 'correct') continue
     const c = guessKey[i]
     if (pool[c] > 0) {

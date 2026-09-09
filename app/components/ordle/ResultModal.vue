@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import {
-  MAX_ATTEMPTS,
   canShareNatively,
   detectPlatform,
   shareText,
   type GameStatus,
   type Mark,
+  type Mode,
 } from '../../utils/ordle-shared'
 import type { Stats } from '../../composables/useOrdleStorage'
 
@@ -19,6 +19,7 @@ const COLOR_PT: Record<string, string> = {
 
 const props = defineProps<{
   gameNumber: number
+  mode: Mode
   status: GameStatus
   answer: string | null
   definition: string | null
@@ -30,6 +31,8 @@ const props = defineProps<{
   color: string
   psalm: string | null
   dark: boolean
+  /** o outro jogo de hoje já foi encerrado? */
+  otherDone: boolean
 }>()
 
 /**
@@ -103,7 +106,18 @@ const ordoLabel = computed(() =>
       : 'Abrir o Ofício de hoje',
 )
 
-const emit = defineEmits<{ (e: 'close'): void }>()
+const emit = defineEmits<{ (e: 'close'): void; (e: 'switch'): void }>()
+
+/**
+ * A porta para o outro jogo do dia. Ela existe sempre, e não só quando o outro
+ * está por jogar: com a partida encerrada o botão ▤ do header abre o resultado
+ * e não as configurações, então sem esta linha quem já jogou os dois não teria
+ * como voltar ao outro tabuleiro até o dia virar.
+ */
+const otherLabel = computed(() => {
+  const outro = props.mode === 'normal' ? 'o difícil' : 'o normal'
+  return props.otherDone ? `Ver ${outro} de hoje` : `Jogar ${outro} de hoje`
+})
 
 /**
  * O que aconteceu de fato, e não só se aconteceu: no Windows o botão copia, e
@@ -187,6 +201,7 @@ async function share() {
     gameNumber: props.gameNumber,
     results: props.results,
     status: props.status,
+    mode: props.mode,
     dark: props.dark,
     url: import.meta.client ? location.origin : undefined,
   })
@@ -270,7 +285,19 @@ async function share() {
       </div>
     </template>
 
-    <!-- 5 e 6: quanto falta e compartilhar -->
+    <!--
+      5: o outro jogo do dia.
+
+      Fica aqui, e não no header, porque este é o momento em que a pergunta faz
+      sentido: acabou um, ainda dá para jogar o outro. É linha de navegação, não
+      propaganda — por isso vem depois do gancho do Ordo e sem caixa.
+    -->
+    <button type="button" class="other" @click="emit('switch')">
+      {{ otherLabel }}
+      <span aria-hidden="true">→</span>
+    </button>
+
+    <!-- 6 e 7: quanto falta e compartilhar -->
     <div class="footer">
       <div class="next">
         <span class="next__label">Próxima palavra</span>
@@ -425,6 +452,24 @@ async function share() {
   font-weight: 600;
   font-size: 0.875rem;
   padding: 0.75rem 1.25rem;
+}
+
+.other {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  width: 100%;
+  min-height: 2.75rem;
+  margin: 0 0 0.25rem;
+  padding: 0.5rem;
+  font: inherit;
+  font-size: 0.875rem;
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--ord-rule);
+  color: var(--ord-accent);
+  cursor: pointer;
 }
 
 .copied { text-align: center; margin: 0.75rem 0 0; font-size: 0.8125rem; color: var(--ord-muted); }

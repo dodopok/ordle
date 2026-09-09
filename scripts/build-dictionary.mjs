@@ -1,19 +1,26 @@
 #!/usr/bin/env node
 /**
- * Gera `server/utils/pt-5.json` — o dicionário de palpites válidos.
+ * Gera `server/utils/pt-<n>.json` — os dicionários de palpites válidos.
  *
  * O .dic do Hunspell só traz formas base; plural, feminino e conjugação vivem
  * como flags de afixo no .aff. Sem expandir, palavras óbvias de sondagem
  * (CARRO, VELAS, REGRA) seriam rejeitadas e o jogo ficaria insuportável.
  * Então: baixa os dois arquivos, aplica as regras SFX/PFX, normaliza e guarda
- * só o que sobra com exatamente 5 letras.
+ * um arquivo por comprimento.
+ *
+ * Um arquivo por comprimento, e não um só com tudo: o modo difícil sorteia o
+ * tamanho do dia, e o servidor importa só o dicionário daquele tamanho. Junto
+ * daria 3,2 MB para parsear em todo cold start, sendo que 2,8 deles são de
+ * comprimentos que o dia não vai usar.
  *
  *   node scripts/build-dictionary.mjs
  */
 import { writeFileSync } from 'node:fs'
 
 const BASE = 'https://raw.githubusercontent.com/LibreOffice/dictionaries/master/pt_BR'
-const OUT = 'server/utils/pt-5.json'
+/** 5 é o modo normal; 6 a 8, os tamanhos do modo difícil. */
+const LENGTHS = [5, 6, 7, 8]
+const OUT = (n) => `server/utils/pt-${n}.json`
 
 const strip = (s) => s.replace(/^﻿/, '')
 const fetchText = async (name) => {
@@ -59,12 +66,13 @@ const normalize = (s) =>
     .toUpperCase()
 
 const WORD = /^[a-zà-öø-ÿ]+$/i
-const out = new Set()
+const out = new Map(LENGTHS.map((n) => [n, new Set()]))
 
 const keep = (w) => {
   if (!WORD.test(w)) return
   const k = normalize(w)
-  if (/^[A-Z]{5}$/.test(k)) out.add(k)
+  if (!/^[A-Z]+$/.test(k)) return
+  out.get(k.length)?.add(k)
 }
 
 const applySfx = (word, rule) => {
@@ -114,7 +122,9 @@ for (const line of dicRaw.split(/\r?\n/).slice(1)) {
   }
 }
 
-const list = [...out].sort()
-writeFileSync(OUT, JSON.stringify(list))
-console.log(`✓ ${list.length} palavras em ${OUT}`)
-console.log('  (as respostas de words.ts entram no Set em dictionary.ts, não aqui)')
+for (const n of LENGTHS) {
+  const list = [...out.get(n)].sort()
+  writeFileSync(OUT(n), JSON.stringify(list))
+  console.log(`✓ ${String(list.length).padStart(6)} palavras de ${n} letras em ${OUT(n)}`)
+}
+console.log('  (as respostas de words.ts e words-hard.ts entram nos Sets em dictionary.ts, não aqui)')

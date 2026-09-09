@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { WORDS } from '../server/utils/words'
+import { WORDS_HARD } from '../server/utils/words-hard'
 import { isValidGuess } from '../server/utils/dictionary'
-import { answerFor, gameId, gameNumber, grade, nextRolloverAt, normalize } from '../server/utils/ordle'
+import {
+  MAX_ATTEMPTS,
+  answerFor,
+  gameId,
+  gameNumber,
+  grade,
+  isMode,
+  nextRolloverAt,
+  normalize,
+} from '../server/utils/ordle'
 import { computeLiturgicalDay, easter, extractDay, parseColor } from '../server/utils/liturgy'
 import { cookieOptions, seal, unseal } from '../server/utils/session'
 import {
@@ -64,9 +74,9 @@ describe('lista de respostas', () => {
     expect(bad.map((w) => w.word)).toEqual([])
   })
 
-  it('toda key existe no dicionário de palpites', () => {
-    const bad = WORDS.filter((w) => !isValidGuess(w.key))
-    expect(bad.map((w) => w.word)).toEqual([])
+  it('toda key existe no dicionário de palpites', async () => {
+    const ok = await Promise.all(WORDS.map((w) => isValidGuess(w.key)))
+    expect(WORDS.filter((_, i) => !ok[i]).map((w) => w.word)).toEqual([])
   })
 
   it('nenhuma key duplicada', () => {
@@ -81,14 +91,25 @@ describe('lista de respostas', () => {
 })
 
 describe('dicionário de palpites', () => {
-  it('aceita palavra comum de sondagem', () => {
+  it('aceita palavra comum de sondagem', async () => {
     for (const w of ['CARRO', 'PLENO', 'SALSA', 'TERMO', 'LIVRO', 'PORTA'])
-      expect(isValidGuess(w), w).toBe(true)
+      expect(await isValidGuess(w), w).toBe(true)
   })
 
-  it('rejeita ruído', () => {
-    expect(isValidGuess('XKCDQ')).toBe(false)
-    expect(isValidGuess('ABC')).toBe(false)
+  it('rejeita ruído', async () => {
+    expect(await isValidGuess('XKCDQ')).toBe(false)
+    expect(await isValidGuess('ABC')).toBe(false)
+  })
+
+  it('aceita palavra comum de 6, 7 e 8 letras, para o modo difícil', async () => {
+    for (const w of ['CARROS', 'CADEIRA', 'JANELAS', 'ESCRITOR', 'CAMINHOS'])
+      expect(await isValidGuess(w), w).toBe(true)
+  })
+
+  it('não há dicionário fora de 5 a 8 letras', async () => {
+    // o comprimento vem da resposta do dia, mas um palpite forjado pode vir de
+    // qualquer tamanho: sem dicionário, a resposta é "não existe", não um erro
+    expect(await isValidGuess('ABCDEFGHIJ')).toBe(false)
   })
 })
 
@@ -143,6 +164,47 @@ describe('palavra do dia', () => {
     expect(answerFor(at('2026-08-17')).word).toBe('CREDO')
   })
 
+  /**
+   * Sequência congelada do lote de lançamento: os jogos #1 a #68, na ordem em
+   * que o jogo os serviu desde a estreia. Acrescentar palavras a `words.ts`
+   * não pode mexer em nenhuma delas — quem jogou o #7 e compartilhou o
+   * resultado tem que continuar tendo jogado a mesma palavra.
+   *
+   * Se este teste cair depois de você acrescentar palavras, a lista foi
+   * reembaralhada inteira: as entradas novas vão no FIM de `words.ts` e num
+   * lote NOVO em BATCHES, nunca esticando um lote fechado.
+   */
+  const LOTE_DE_LANCAMENTO = [
+    'CREDO', 'SALVE', 'ICONE', 'FERIA', 'PADRE', 'SANTO',
+    'NIMBO', 'GRACA', 'CORAL', 'RITOS', 'MAGOS', 'CISMA',
+    'TERCA', 'SINAL', 'PRIOR', 'AMBAO', 'AMITO', 'MITRA',
+    'FONTE', 'SALMO', 'BISPO', 'HINOS', 'MISSA', 'CULTO',
+    'CINZA', 'CAPUZ', 'DOGMA', 'PAULO', 'TRONO', 'SEXTA',
+    'SINOS', 'LENHO', 'CANON', 'CANTO', 'ABADE', 'ATRIO',
+    'MANTO', 'UNCAO', 'LINHO', 'PALMA', 'ORDEM', 'NATAL',
+    'PALIO', 'ORGAO', 'KYRIE', 'PALIA', 'RAMOS', 'SIMAO',
+    'ANDRE', 'LUCAS', 'PRECE', 'VINHO', 'CULPA', 'ALTAR',
+    'VOTOS', 'CLERO', 'MONGE', 'AGNUS', 'REGRA', 'JEJUM',
+    'CURIA', 'CIRIO', 'VELAS', 'CORPO', 'LEIGO', 'TIAGO',
+    'PEDRO', 'MARIA',
+  ]
+
+  it('acrescentar palavras não mexe nos dias já servidos', () => {
+    const start = at('2026-08-17')
+    const servidas = LOTE_DE_LANCAMENTO.map((_, i) => answerFor(start + i * 86_400_000).key)
+    expect(servidas).toEqual(LOTE_DE_LANCAMENTO)
+  })
+
+  it('todo dia tem resposta: os lotes cobrem a lista inteira', () => {
+    // o próprio módulo estoura se BATCHES e WORDS divergirem; aqui é a rede
+    // que faz isso cair no CI e não no primeiro acesso da manhã
+    const start = at('2026-08-17')
+    const ciclo = Array.from({ length: WORDS.length }, (_, i) =>
+      answerFor(start + i * 86_400_000),
+    )
+    expect(ciclo.filter((e) => !e?.key)).toEqual([])
+  })
+
   it('nextRolloverAt cai na meia-noite seguinte em São Paulo', () => {
     const now = Date.parse('2026-08-17T22:00:00-03:00')
     expect(nextRolloverAt(now)).toBe(Date.parse('2026-08-18T00:00:00-03:00'))
@@ -150,17 +212,147 @@ describe('palavra do dia', () => {
   })
 })
 
+
+describe('modo difícil', () => {
+  const at = (isoLocal: string) => Date.parse(`${isoLocal}T12:00:00-03:00`)
+
+  it('é lista própria, sem cruzar com a do modo normal', () => {
+    const normais = new Set(WORDS.map((w) => w.key))
+    expect(WORDS_HARD.filter((w) => normais.has(w.key)).map((w) => w.word)).toEqual([])
+  })
+
+  it('toda key tem de 6 a 8 letras e é a normalização da palavra', () => {
+    const bad = WORDS_HARD.filter(
+      (w) => !/^[A-Z]{6,8}$/.test(w.key) || normalize(w.word) !== w.key,
+    )
+    expect(bad.map((w) => w.word)).toEqual([])
+  })
+
+  it('nenhuma key duplicada e toda entrada tem definição', () => {
+    const seen = new Map<string, number>()
+    for (const w of WORDS_HARD) seen.set(w.key, (seen.get(w.key) ?? 0) + 1)
+    expect([...seen].filter(([, n]) => n > 1).map(([k]) => k)).toEqual([])
+    expect(WORDS_HARD.filter((w) => !w.definition.trim())).toEqual([])
+  })
+
+  it('toda key existe no dicionário do próprio comprimento', async () => {
+    const ok = await Promise.all(WORDS_HARD.map((w) => isValidGuess(w.key)))
+    expect(WORDS_HARD.filter((_, i) => !ok[i]).map((w) => w.word)).toEqual([])
+  })
+
+  it('os três comprimentos aparecem em proporção parecida', () => {
+    // sem isso o modo vira "quase sempre 8 letras" e o tabuleiro nunca muda —
+    // o comprimento variável é o ponto do modo, então ele precisa variar
+    const n = (len: number) => WORDS_HARD.filter((w) => w.key.length === len).length
+    for (const len of [6, 7, 8]) {
+      expect(n(len), `${len} letras`).toBeGreaterThanOrEqual(WORDS_HARD.length / 6)
+    }
+    expect(n(6) + n(7) + n(8)).toBe(WORDS_HARD.length)
+  })
+
+  it('serve palavra do difícil, e nunca a mesma do normal no mesmo dia', () => {
+    const start = at('2026-08-17')
+    for (let i = 0; i < 40; i++) {
+      const t = start + i * 86_400_000
+      const hard = answerFor(t, 'hard')
+      expect(hard.key.length).toBeGreaterThanOrEqual(6)
+      expect(hard.key).not.toBe(answerFor(t, 'normal').key)
+    }
+  })
+
+  it('não repete palavra dentro de um ciclo completo', () => {
+    const start = at('2026-08-17')
+    const keys = Array.from(
+      { length: WORDS_HARD.length },
+      (_, i) => answerFor(start + i * 86_400_000, 'hard').key,
+    )
+    expect(new Set(keys).size).toBe(WORDS_HARD.length)
+  })
+
+  it('a estreia serve a primeira palavra da lista, não o meio dela', () => {
+    // sem a âncora HARD_DEBUT o índice seria o mesmo contador de dias do
+    // normal, e o modo estrearia na 24ª palavra do embaralhamento — nada se
+    // perderia, mas a lista curada entraria girada
+    expect(answerFor(at('2026-09-09'), 'hard').word).toBe('CUSTÓDIA')
+  })
+
+  it('a partir da estreia, o ciclo passa por todas as palavras', () => {
+    const debut = at('2026-09-09')
+    const keys = Array.from(
+      { length: WORDS_HARD.length },
+      (_, i) => answerFor(debut + i * 86_400_000, 'hard').key,
+    )
+    expect(new Set(keys).size).toBe(WORDS_HARD.length)
+  })
+
+  it('o modo normal é o padrão de answerFor', () => {
+    expect(answerFor(at('2026-08-17')).key).toBe(answerFor(at('2026-08-17'), 'normal').key)
+  })
+
+  it('7 tentativas no difícil, 6 no normal', () => {
+    expect(MAX_ATTEMPTS.hard).toBe(7)
+    expect(MAX_ATTEMPTS.normal).toBe(6)
+  })
+
+  it('isMode só aceita os dois modos', () => {
+    expect(isMode('normal')).toBe(true)
+    expect(isMode('hard')).toBe(true)
+    // query string é entrada de usuário: "?mode=facil" não pode virar modo
+    for (const v of ['facil', '', undefined, null, 1, {}]) expect(isMode(v), String(v)).toBe(false)
+  })
+
+  it('a coloração acompanha o comprimento da resposta, não uma constante', () => {
+    expect(grade('TURIBULO', 'TURIBULO')).toEqual(Array(8).fill('correct'))
+    expect(grade('ESTOLA', 'ESTOLA').length).toBe(6)
+    expect(grade('LAUDES', 'MATINAS').length).toBe(7) // usa o tamanho da resposta
+  })
+
+  it('nenhuma definição do difícil usa "rezar"', () => {
+    expect(WORDS_HARD.filter((w) => /\brez/i.test(w.definition)).map((w) => w.word)).toEqual([])
+  })
+})
+
 describe('sessão assinada', () => {
+
   it('vai e volta', () => {
-    const s = { id: '2026-08-17', guesses: ['SALMO'], status: 'playing' as const }
+    const s = {
+      id: '2026-08-17',
+      guesses: ['SALMO'],
+      status: 'playing' as const,
+      mode: 'normal' as const,
+    }
     expect(unseal(seal(s))).toEqual(s)
   })
 
+  it('cookie antigo, sem o campo de modo, vale como partida normal', () => {
+    // é o cookie de quem está no meio de uma partida na hora do deploy
+    const antigo = seal({ id: '2026-08-17', guesses: ['SALMO'], status: 'playing' } as never)
+    expect(unseal(antigo)).toEqual({
+      id: '2026-08-17',
+      guesses: ['SALMO'],
+      status: 'playing',
+      mode: 'normal',
+    })
+  })
+
+  it('cookie de um modo não vale no outro', () => {
+    // os dois são assinados com a mesma chave: sem o campo de modo, colar o
+    // cookie do normal em `ordle_h` daria a vitória de graça no difícil
+    const normal = unseal(
+      seal({ id: '2026-08-17', guesses: [], status: 'won', mode: 'normal' }),
+    )
+    expect(normal?.mode).toBe('normal')
+    const hard = unseal(seal({ id: '2026-08-17', guesses: [], status: 'won', mode: 'hard' }))
+    expect(hard?.mode).toBe('hard')
+  })
+
   it('rejeita corpo adulterado', () => {
-    const token = seal({ id: '2026-08-17', guesses: [], status: 'playing' })
+    const token = seal({ id: '2026-08-17', guesses: [], status: 'playing', mode: 'normal' })
     const [, sig] = token.split('.')
     const forged =
-      Buffer.from(JSON.stringify({ id: '2026-08-17', guesses: [], status: 'won' })).toString(
+      Buffer.from(
+        JSON.stringify({ id: '2026-08-17', guesses: [], status: 'won', mode: 'normal' }),
+      ).toString(
         'base64url',
       ) + `.${sig}`
     expect(unseal(forged)).toBeNull()
@@ -220,6 +412,13 @@ describe('compartilhamento', () => {
     // "em 1 tentativas" é o vacilo clássico de template
     expect(shareHeadline(7, 1, 'won')).toBe('Acertei o Ordle #7 de primeira!')
     expect(shareHeadline(7, 2, 'won')).toBe('Acertei o Ordle #7 em 2 tentativas.')
+  })
+
+  it('o difícil aparece no texto compartilhado', () => {
+    expect(shareHeadline(7, 3, 'won', 'hard')).toBe('Acertei o Ordle #7 no difícil em 3 tentativas.')
+    expect(shareHeadline(7, 1, 'won', 'hard')).toBe('Acertei o Ordle #7 no difícil de primeira!')
+    // sem o modo, nada muda para quem joga o normal
+    expect(shareHeadline(7, 3, 'won')).toBe('Acertei o Ordle #7 em 3 tentativas.')
   })
 
   it('derrota não expõe contagem de tentativas', () => {
@@ -438,7 +637,7 @@ describe('segredo da sessão (fail-closed)', () => {
 
   it('sem ORDLE_SECRET, só dev e test usam a chave pública', async () => {
     await withEnv({ ORDLE_SECRET: undefined, NODE_ENV: 'development' }, () => {
-      expect(() => seal({ id: 'x', guesses: [], status: 'playing' })).not.toThrow()
+      expect(() => seal({ id: 'x', guesses: [], status: 'playing', mode: 'normal' })).not.toThrow()
     })
   })
 
@@ -447,7 +646,10 @@ describe('segredo da sessão (fail-closed)', () => {
     // com ela qualquer um forja um cookie com status 'won'
     for (const env of [undefined, 'preview', 'production', 'staging']) {
       await withEnv({ ORDLE_SECRET: undefined, NODE_ENV: env }, () => {
-        expect(() => seal({ id: 'x', guesses: [], status: 'playing' }), String(env)).toThrow(
+        expect(
+          () => seal({ id: 'x', guesses: [], status: 'playing', mode: 'normal' }),
+          String(env),
+        ).toThrow(
           /ORDLE_SECRET/,
         )
       })
@@ -456,7 +658,9 @@ describe('segredo da sessão (fail-closed)', () => {
 
   it('rejeita segredo curto demais', async () => {
     await withEnv({ ORDLE_SECRET: 'curto', NODE_ENV: 'production' }, () => {
-      expect(() => seal({ id: 'x', guesses: [], status: 'playing' })).toThrow(/ORDLE_SECRET/)
+      expect(() => seal({ id: 'x', guesses: [], status: 'playing', mode: 'normal' })).toThrow(
+        /ORDLE_SECRET/,
+      )
     })
   })
 

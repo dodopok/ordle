@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useOrdle } from '../composables/useOrdle'
 import { useOrdleStorage, type Prefs } from '../composables/useOrdleStorage'
+import type { Mode } from '../utils/ordle-shared'
 
 // é um jogo: SEO não importa aqui, e localStorage não existe no SSR
 definePageMeta({ ssr: false })
@@ -37,15 +38,22 @@ useHead({
   ],
 })
 
-const { state, keys, type, backspace, submit, focusCell } = useOrdle()
 const storage = useOrdleStorage()
 
-// --- preferências --------------------------------------------------------
-const prefs = ref<Prefs>({ v: 1, theme: 'system', highContrast: false, sound: true })
+/*
+ * As preferências são lidas aqui no setup, e não no onMounted, por causa da
+ * ordem: `useOrdle` registra o próprio onMounted, que busca o estado do
+ * servidor. Se o modo só chegasse depois, quem joga no difícil veria o
+ * tabuleiro do normal aparecer e ser trocado. A página é `ssr: false`, então
+ * o localStorage já existe neste ponto.
+ */
+const prefs = ref<Prefs>(storage.loadPrefs())
+
+const { state, keys, type, backspace, submit, focusCell, setMode } = useOrdle(prefs.value.mode)
+
 const systemDark = ref(false)
 
 onMounted(() => {
-  prefs.value = storage.loadPrefs()
   const mq = window.matchMedia('(prefers-color-scheme: dark)')
   systemDark.value = mq.matches
   mq.addEventListener('change', (e) => (systemDark.value = e.matches))
@@ -71,7 +79,39 @@ const today = computed(() => {
   return `${d} ${MESES[m - 1]}`
 })
 
-const stats = computed(() => state.stats ?? storage.loadStats())
+const stats = computed(() => state.stats ?? storage.loadStats(state.mode))
+
+/**
+ * Quais dos dois jogos de hoje já acabaram. Sai do localStorage, que guarda uma
+ * partida por modo — não precisa de ida ao servidor, e o jogo funciona offline
+ * depois do primeiro carregamento.
+ */
+const doneToday = computed<Record<Mode, boolean>>(() => {
+  const check = (m: Mode) => {
+    if (m === state.mode) return state.status !== 'playing'
+    const g = storage.loadGame(m)
+    return !!g && g.gameId === state.gameId && g.status !== 'playing'
+  }
+  // gameId no fecho: a virada do dia zera os dois
+  return { normal: check('normal'), hard: check('hard') }
+})
+
+/** o outro jogo do dia, para o convite no fim da partida */
+const otherDone = computed(() =>
+  state.mode === 'normal' ? doneToday.value.hard : doneToday.value.normal,
+)
+
+/** trocar de jogo persiste: quem estava no difícil reabre nele */
+function changeMode(mode: Mode) {
+  updatePrefs({ ...prefs.value, mode })
+  setMode(mode)
+}
+
+/** convite do fim de partida: fecha o resultado e abre o outro jogo */
+function switchToOther() {
+  state.modal = null
+  changeMode(state.mode === 'normal' ? 'hard' : 'normal')
+}
 
 function openResult() {
   state.modal = state.status === 'playing' ? 'settings' : 'result'
@@ -99,10 +139,40 @@ function openResult() {
           <button type="button" aria-label="Estatísticas" @click="openResult">▤</button>
         </div>
       </div>
+
+      <!--
+        Os dois jogos do dia ficam aqui, e não escondidos nas configurações:
+        são duas partidas independentes, e quem abre o jogo tem que ver que a
+        segunda existe. O ✓ diz qual já acabou hoje.
+
+        A fileira custa altura, e altura no celular sai do tile — por isso ela
+        é compacta e `--ord-chrome` foi remedido em cada faixa depois de a
+        fileira existir, não estimado.
+      -->
+      <nav class="hd__modes" aria-label="Jogo de hoje">
+        <button
+          type="button"
+          :class="{ 'is-on': state.mode === 'normal' }"
+          :aria-pressed="state.mode === 'normal'"
+          @click="changeMode('normal')"
+        >
+          Normal<span v-if="doneToday.normal" aria-label="já jogado"> ✓</span>
+        </button>
+        <button
+          type="button"
+          :class="{ 'is-on': state.mode === 'hard' }"
+          :aria-pressed="state.mode === 'hard'"
+          @click="changeMode('hard')"
+        >
+          Difícil<span v-if="doneToday.hard" aria-label="já jogado"> ✓</span>
+        </button>
+      </nav>
     </header>
 
     <main class="main">
       <OrdleBoard
+        :word-length="state.wordLength"
+        :max-attempts="state.maxAttempts"
         :guesses="state.guesses"
         :results="state.results"
         :current="state.current"
@@ -138,6 +208,7 @@ function openResult() {
       v-else-if="state.modal === 'settings'"
       :stats="stats"
       :prefs="prefs"
+      :mode="state.mode"
       @update="updatePrefs"
       @close="state.modal = null"
     />
@@ -145,6 +216,7 @@ function openResult() {
     <OrdleResultModal
       v-else-if="state.modal === 'result'"
       :game-number="state.gameNumber"
+      :mode="state.mode"
       :status="state.status"
       :answer="state.answer"
       :definition="state.definition"
@@ -156,6 +228,8 @@ function openResult() {
       :color="state.liturgicalColor"
       :psalm="state.liturgicalPsalm"
       :dark="dark"
+      :other-done="otherDone"
+      @switch="switchToOther"
       @close="state.modal = null"
     />
   </div>
@@ -186,6 +260,47 @@ function openResult() {
   max-width: 500px;
   margin: 0 auto;
   width: 100%;
+}
+
+/*
+ * A fileira dos dois jogos: filete embaixo e nada de fundo, para não virar
+ * outra barra. O jogo aberto é sublinhado na cor do dia — a mesma linguagem do
+ * filete do topo, e não um botão pintado, que competiria com as cores do
+ * tabuleiro.
+ */
+.hd__modes {
+  display: flex;
+  justify-content: center;
+  gap: 0.25rem;
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 0 max(0.875rem, env(safe-area-inset-left));
+}
+
+.hd__modes button {
+  font: inherit;
+  font-family: var(--ord-ui);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.4375rem 0.875rem;
+  min-height: 2rem; /* alvo de toque sem inflar o cromo */
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--ord-muted);
+  cursor: pointer;
+}
+
+.hd__modes button.is-on {
+  color: var(--ord-ink);
+  border-bottom-color: var(--ord-accent);
+  font-weight: 600;
+}
+
+.hd__modes button:focus-visible {
+  outline: 2px solid var(--ord-accent);
+  outline-offset: -2px;
 }
 
 .hd__logo {

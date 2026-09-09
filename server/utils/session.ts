@@ -1,12 +1,20 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
+import type { Mode } from './ordle'
 
-export const COOKIE_NAME = 'ordle_s'
 export const COOKIE_MAX_AGE = 60 * 60 * 24 * 2
+
+/**
+ * Um cookie por modo, e não um cookie com os dois tabuleiros: assim a partida
+ * normal que já está em andamento hoje continua no mesmo `ordle_s`, com o
+ * mesmo formato, sem migração nenhuma no dia do deploy.
+ */
+export const cookieName = (mode: Mode) => (mode === 'hard' ? 'ordle_h' : 'ordle_s')
 
 export type Session = {
   id: string
   guesses: string[]
   status: 'playing' | 'won' | 'lost'
+  mode: Mode
 }
 
 /**
@@ -54,7 +62,12 @@ export function unseal(token?: string): Session | null {
     const parsed = JSON.parse(Buffer.from(body, 'base64url').toString())
     if (!parsed || typeof parsed.id !== 'string' || !Array.isArray(parsed.guesses)) return null
     if (!['playing', 'won', 'lost'].includes(parsed.status)) return null
-    return parsed as Session
+    // cookie emitido antes do modo difícil não tem o campo: é partida normal.
+    // O `mode` existe para o cookie de um modo não valer no outro — os dois
+    // são assinados com a mesma chave, então sem ele um `ordle_s` com status
+    // 'won' colado em `ordle_h` daria a vitória de graça no difícil.
+    const mode: Mode = parsed.mode === 'hard' ? 'hard' : 'normal'
+    return { ...parsed, mode } as Session
   } catch {
     return null
   }

@@ -25,32 +25,35 @@
 
   /*
    * O tile é limitado pela largura E pela altura. Sem o segundo termo, um
-   * celular baixo empurra o teclado para fora da tela: são 6 fileiras de tile
-   * mais header e teclado, e 13vw ignora isso por completo.
+   * celular baixo empurra o teclado para fora da tela: são as fileiras de tile
+   * mais header e teclado, e uma medida de viewport ignora isso por completo.
    *
    * `--ord-chrome` é o que não é tabuleiro (header + teclado + folgas). Ele
    * acompanha os mesmos breakpoints em que as teclas encolhem — uma constante
    * só erra nos dois extremos.
+   *
+   * `--ord-cols` e `--ord-rows` são escritas pelo Board a cada partida: no
+   * modo difícil a palavra do dia tem de 6 a 8 letras, e são 7 tentativas.
+   * O padrão aqui é o do modo normal, para o tabuleiro já nascer certo antes
+   * de o servidor responder.
    */
-  /* medidos no browser, não estimados: header 68px + teclado + padding do
-     tabuleiro, em cada faixa de altura */
-  --ord-chrome: 18rem;
+  --ord-cols: 5;
+  --ord-rows: 6;
+  /* medidos no browser, não estimados: header (68px da barra + 32px da fileira
+     dos dois jogos) + teclado + padding do tabuleiro, em cada faixa de altura.
+     Quem mexer na altura do header remede isto: com o valor antigo, o teclado
+     sai da tela em 375x667 no modo normal — o tile cresce para 60px e empurra. */
+  --ord-chrome: 20rem;
   --ord-gap: 6px;
-  --ord-tile: max(
-    2rem,
-    min(
-      clamp(2.75rem, 13vw, 3.75rem),
-      calc((100dvh - var(--ord-chrome) - 5 * var(--ord-gap)) / 6)
-    )
-  );
+  /* --ord-tile é calculado no .board, logo abaixo, e não aqui: ver o porquê lá */
 }
 
 @media (max-height: 700px) {
-  :root { --ord-chrome: 16.5rem; }
+  :root { --ord-chrome: 18.5rem; }
 }
 
 @media (max-height: 560px) {
-  :root { --ord-chrome: 14.75rem; --ord-gap: 4px; }
+  :root { --ord-chrome: 16.75rem; --ord-gap: 4px; }
 }
 
 /*
@@ -60,7 +63,31 @@
  */
 @media (orientation: landscape) and (max-height: 560px) {
   /* aqui o teclado sai de baixo do tabuleiro, então o cromo é só o header */
-  :root { --ord-chrome: 6.5rem; }
+  :root { --ord-chrome: 8.5rem; }
+}
+
+/*
+ * O tamanho do tile mora no `.board`, e não no `:root`, porque `--ord-cols` e
+ * `--ord-rows` são escritas pelo próprio Board a cada partida. Uma custom
+ * property é substituída onde é DEFINIDA: no `:root` a conta enxergaria o
+ * `--ord-cols: 5` do padrão, não o 8 do dia difícil, e o tabuleiro sairia
+ * 522px de largura numa tela de 390 — foi o que aconteceu no primeiro teste
+ * em navegador. Definida aqui, ela é recalculada com os valores do elemento,
+ * e os tiles herdam o resultado.
+ *
+ * A largura disponível divide por `cols` em vez de sair de um `13vw` fixo:
+ * com 8 colunas, 13vw daria uma linha de 104vw. A folga de 2rem é o padding
+ * lateral da coluna do jogo.
+ */
+.board {
+  --ord-tile: max(
+    2rem,
+    min(
+      3.75rem,
+      calc((100vw - 2rem - (var(--ord-cols) - 1) * var(--ord-gap)) / var(--ord-cols)),
+      calc((100dvh - var(--ord-chrome) - (var(--ord-rows) - 1) * var(--ord-gap)) / var(--ord-rows))
+    )
+  );
 }
 
 /* cor do dia — filete, número do jogo e a rubrica do modal, nunca os tiles */

@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import type { Mode } from '../../utils/ordle-shared'
 import type { Prefs, Stats } from '../../composables/useOrdleStorage'
 
-const props = defineProps<{ stats: Stats; prefs: Prefs }>()
+const props = defineProps<{ stats: Stats; prefs: Prefs; mode: Mode }>()
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'update', prefs: Prefs): void
@@ -15,7 +16,7 @@ const set = (patch: Partial<Prefs>) => emit('update', { ...props.prefs, ...patch
 </script>
 
 <template>
-  <OrdleModal title="Estatísticas" @close="emit('close')">
+  <OrdleModal :title="mode === 'hard' ? 'Estatísticas (difícil)' : 'Estatísticas'" @close="emit('close')">
     <div class="stats">
       <div><b>{{ stats.played }}</b><span>jogos</span></div>
       <div><b>{{ winRate }}%</b><span>vitórias</span></div>
@@ -86,6 +87,4 @@ const set = (patch: Partial<Prefs>) => emit('update', { ...props.prefs, ...patch
 .row select { font: inherit; padding: 0.25rem; background: var(--ord-bg); color: inherit; border: 1px solid var(--ord-rule); border-radius: 4px; }
 .row input[type='checkbox'] { width: 1.125rem; height: 1.125rem; accent-color: var(--ord-accent); }
 
-.credit { margin: 1.25rem 0 0; font-size: 0.8125rem; color: var(--ord-muted); text-align: center; }
-.credit a { color: var(--ord-accent); }
 </style>

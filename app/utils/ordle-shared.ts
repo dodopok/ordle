@@ -37,8 +37,18 @@ export function canShareNatively(ua: string, hasShare: boolean): boolean {
   return hasShare && !/windows|win32|win64/i.test(ua)
 }
 
-export const WORD_LENGTH = 5
-export const MAX_ATTEMPTS = 6
+export type Mode = 'normal' | 'hard'
+
+/**
+ * Só o que o tabuleiro usa até o servidor responder — quem manda de verdade
+ * são `wordLength` e `maxAttempts` da resposta de `/api/ordle/state`, porque
+ * no modo difícil o comprimento é o da palavra do dia (6 a 8) e não uma
+ * constante.
+ */
+export const DEFAULT_WORD_LENGTH = 5
+export const DEFAULT_MAX_ATTEMPTS = 6
+
+export const MAX_ATTEMPTS: Record<Mode, number> = { normal: 6, hard: 7 }
 
 export const normalize = (s: string) =>
   s
@@ -75,8 +85,13 @@ const EMOJI_DARK: Record<Mark, string> = { correct: '🟩', present: '🟨', abs
  * nunca viu o jogo, uma frase diz a mesma coisa e ainda explica o que é. O
  * número continua ali — dá para comparar com o do vizinho do mesmo jeito.
  */
-export function shareHeadline(gameNumber: number, attempts: number, status: GameStatus) {
-  const jogo = `o Ordle #${gameNumber}`
+export function shareHeadline(
+  gameNumber: number,
+  attempts: number,
+  status: GameStatus,
+  mode: Mode = 'normal',
+) {
+  const jogo = mode === 'hard' ? `o Ordle #${gameNumber} no difícil` : `o Ordle #${gameNumber}`
   if (status !== 'won') return `Não acertei ${jogo} hoje.`
   if (attempts === 1) return `Acertei ${jogo} de primeira!`
   return `Acertei ${jogo} em ${attempts} tentativas.`
@@ -86,11 +101,12 @@ export function shareText(opts: {
   gameNumber: number
   results: Mark[][]
   status: GameStatus
+  mode?: Mode
   dark?: boolean
   url?: string
 }) {
   const palette = opts.dark ? EMOJI_DARK : EMOJI
-  const headline = shareHeadline(opts.gameNumber, opts.results.length, opts.status)
+  const headline = shareHeadline(opts.gameNumber, opts.results.length, opts.status, opts.mode)
   const grid = opts.results.map((row) => row.map((m) => palette[m]).join('')).join('\n')
   return `${headline}\n\n${grid}\n\n${opts.url ?? 'ofício.app'}`
 }

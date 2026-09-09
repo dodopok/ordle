@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { MAX_ATTEMPTS, WORD_LENGTH, type GameStatus, type Mark } from '../../utils/ordle-shared'
+import type { GameStatus, Mark } from '../../utils/ordle-shared'
 
 const props = defineProps<{
+  /** vêm do servidor: no modo difícil a largura é a da palavra do dia */
+  wordLength: number
+  maxAttempts: number
   guesses: string[]
   results: Mark[][]
   current: string[]
@@ -15,22 +18,22 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: 'select', index: number): void }>()
 
 const rows = computed(() =>
-  Array.from({ length: MAX_ATTEMPTS }, (_, row) => {
+  Array.from({ length: props.maxAttempts }, (_, row) => {
     const guess = props.guesses[row]
     if (guess) return { letters: guess.split(''), marks: props.results[row] ?? null, done: true }
     if (row === props.guesses.length)
       return {
-        letters: Array.from({ length: WORD_LENGTH }, (_, i) => props.current[i] ?? ''),
+        letters: Array.from({ length: props.wordLength }, (_, i) => props.current[i] ?? ''),
         marks: null,
         done: false,
       }
-    return { letters: Array(WORD_LENGTH).fill(''), marks: null, done: false }
+    return { letters: Array(props.wordLength).fill(''), marks: null, done: false }
   }),
 )
 
 /** só a linha em digitação aceita clique, e só com a partida em andamento */
 const editable = computed(
-  () => props.status === 'playing' && props.guesses.length < MAX_ATTEMPTS,
+  () => props.status === 'playing' && props.guesses.length < props.maxAttempts,
 )
 
 const activeRow = computed(() => props.guesses.length)
@@ -50,7 +53,17 @@ const liveMessage = computed(() => {
 </script>
 
 <template>
-  <div class="board" role="group" aria-label="Tabuleiro">
+  <!--
+    As duas medidas do tabuleiro viram custom properties porque o CSS precisa
+    delas para dimensionar o tile: a largura disponível se divide por `cols` e
+    a altura por `rows`, e no modo difícil os dois mudam.
+  -->
+  <div
+    class="board"
+    role="group"
+    aria-label="Tabuleiro"
+    :style="{ '--ord-cols': wordLength, '--ord-rows': maxAttempts }"
+  >
     <div
       v-for="(row, r) in rows"
       :key="r"
@@ -84,7 +97,7 @@ const liveMessage = computed(() => {
 
 .board__row {
   display: grid;
-  grid-template-columns: repeat(5, var(--ord-tile));
+  grid-template-columns: repeat(var(--ord-cols), var(--ord-tile));
   gap: var(--ord-gap);
 }
 
