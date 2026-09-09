@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   MAX_ATTEMPTS,
+  canShareNatively,
   detectPlatform,
   shareText,
   type GameStatus,
@@ -164,13 +165,13 @@ async function copy(text: string) {
 }
 
 /**
- * O share sheet nativo só vale no celular.
+ * Share sheet nativo onde ele funciona; no Windows, copiar.
  *
- * No Windows o `navigator.share` existe (Chrome e Edge), mas abre a folha de
- * compartilhamento do sistema — que trava no spinner com frequência, e cuja
- * promessa não rejeita enquanto isso. O usuário fica preso numa caixa que não
- * é nossa e o fallback de copiar nunca roda. No desktop, então, copiamos
- * direto: é o gesto que a pessoa ia fazer de qualquer jeito.
+ * Mac, iOS e Android abrem uma folha que resolve rápido. O Windows não: lá o
+ * `navigator.share` existe (Chrome e Edge) mas delega para a folha do sistema,
+ * que trava no spinner com frequência — e como a promessa não rejeita enquanto
+ * isso, o usuário fica preso numa caixa que não é nossa e o copiar nunca roda.
+ * Copiar direto é o gesto que ele ia fazer de qualquer jeito.
  */
 async function share() {
   const text = shareText({
@@ -181,7 +182,7 @@ async function share() {
     url: import.meta.client ? location.origin : undefined,
   })
 
-  const native = platform !== 'desktop' && import.meta.client && !!navigator.share
+  const native = import.meta.client && canShareNatively(navigator.userAgent, !!navigator.share)
 
   try {
     if (native) {
