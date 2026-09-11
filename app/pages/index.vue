@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useOrdle } from '../composables/useOrdle'
 import { useOrdleStorage, type Prefs } from '../composables/useOrdleStorage'
-import type { Mode } from '../utils/ordle-shared'
+import { isMode, type Mode } from '../utils/ordle-shared'
 
 // é um jogo: SEO não importa aqui, e localStorage não existe no SSR
 definePageMeta({ ssr: false })
@@ -47,9 +47,15 @@ const storage = useOrdleStorage()
  * tabuleiro do normal aparecer e ser trocado. A página é `ssr: false`, então
  * o localStorage já existe neste ponto.
  */
-const prefs = ref<Prefs>(storage.loadPrefs())
+const route = useRoute()
+const storedPrefs = storage.loadPrefs()
+// A URL é o fallback de restauração: alguns navegadores móveis podem limpar
+// ou particionar o localStorage, mas o refresh mantém a rota atual.
+const routeMode = isMode(route.query.mode) ? route.query.mode : null
+const initialMode = routeMode ?? storedPrefs.mode
+const prefs = ref<Prefs>({ ...storedPrefs, mode: initialMode })
 
-const { state, keys, type, backspace, submit, focusCell, setMode } = useOrdle(prefs.value.mode)
+const { state, keys, type, backspace, submit, focusCell, setMode } = useOrdle(initialMode)
 
 const systemDark = ref(false)
 
@@ -66,6 +72,14 @@ const dark = computed(() =>
 function updatePrefs(p: Prefs) {
   prefs.value = p
   storage.savePrefs(p)
+}
+
+function persistModeInUrl(mode: Mode) {
+  if (!import.meta.client) return
+  const url = new URL(window.location.href)
+  if (mode === 'hard') url.searchParams.set('mode', mode)
+  else url.searchParams.delete('mode')
+  window.history.replaceState(window.history.state, '', url)
 }
 
 // --- header --------------------------------------------------------------
@@ -104,6 +118,7 @@ const otherDone = computed(() =>
 /** trocar de jogo persiste: quem estava no difícil reabre nele */
 function changeMode(mode: Mode) {
   updatePrefs({ ...prefs.value, mode })
+  persistModeInUrl(mode)
   setMode(mode)
 }
 
@@ -169,8 +184,9 @@ function openResult() {
       </nav>
     </header>
 
-    <main class="main">
+    <main class="main" :aria-busy="!state.ready">
       <OrdleBoard
+        v-if="state.boardReady"
         :word-length="state.wordLength"
         :max-attempts="state.maxAttempts"
         :guesses="state.guesses"
@@ -183,6 +199,7 @@ function openResult() {
         :win="state.win"
         @select="focusCell"
       />
+      <p v-else class="board-loading" role="status">Carregando o tabuleiro…</p>
     </main>
 
     <OrdleKeyboard
@@ -349,6 +366,14 @@ function openResult() {
 }
 
 .main { display: grid; align-content: center; min-height: 0; }
+
+.board-loading {
+  margin: 1rem 0;
+  color: var(--ord-muted);
+  font-family: var(--ord-display);
+  font-size: 1.125rem;
+  text-align: center;
+}
 
 /* celular deitado: tabuleiro à esquerda, teclado à direita */
 @media (orientation: landscape) and (max-height: 560px) {

@@ -54,6 +54,9 @@ export function useOrdle(initialMode: Mode = 'normal') {
      */
     wordLength: DEFAULT_WORD_LENGTH,
     maxAttempts: DEFAULT_MAX_ATTEMPTS,
+    // No difícil o tamanho só é conhecido quando há cache válido ou a API
+    // responde. Enquanto isso, não mostra uma grade de cinco casas por engano.
+    boardReady: initialMode === 'normal',
     guesses: [] as string[],
     results: [] as Mark[][],
     /**
@@ -110,6 +113,7 @@ export function useOrdle(initialMode: Mode = 'normal') {
         mode: requestedMode,
         wordLength: length ?? DEFAULT_WORD_LENGTH,
         maxAttempts: MAX_ATTEMPTS[requestedMode],
+        boardReady: length !== null,
         current: Array<string>(length ?? DEFAULT_WORD_LENGTH).fill(''),
         cursor: 0,
       })
@@ -149,6 +153,7 @@ export function useOrdle(initialMode: Mode = 'normal') {
         mode: server.mode,
         wordLength: server.wordLength,
         maxAttempts: server.maxAttempts,
+        boardReady: true,
         guesses: server.guesses,
         results: server.results,
         status: server.status,
@@ -199,6 +204,7 @@ export function useOrdle(initialMode: Mode = 'normal') {
     Object.assign(state, {
       wordLength: length ?? DEFAULT_WORD_LENGTH,
       maxAttempts: MAX_ATTEMPTS[mode],
+      boardReady: length !== null,
       guesses: [],
       results: [],
       current: Array<string>(length ?? DEFAULT_WORD_LENGTH).fill(''),
