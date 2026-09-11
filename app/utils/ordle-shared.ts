@@ -39,6 +39,8 @@ export function canShareNatively(ua: string, hasShare: boolean): boolean {
 
 export type Mode = 'normal' | 'hard'
 
+export const isMode = (v: unknown): v is Mode => v === 'normal' || v === 'hard'
+
 /**
  * Só o que o tabuleiro usa até o servidor responder — quem manda de verdade
  * são `wordLength` e `maxAttempts` da resposta de `/api/ordle/state`, porque
