@@ -13,6 +13,8 @@ export type StoredGame = {
   v: 1
   gameId: string
   gameNumber: number
+  /** guardado para o difícil poder pintar o tabuleiro antes da rede responder */
+  wordLength?: number
   guesses: string[]
   results: Mark[][]
   status: GameStatus
@@ -90,6 +92,7 @@ export function useOrdleStorage() {
   function saveGame(mode: Mode, s: {
     gameId: string
     gameNumber: number
+    wordLength: number
     guesses: string[]
     results: Mark[][]
     status: GameStatus
@@ -100,6 +103,7 @@ export function useOrdleStorage() {
       v: 1,
       gameId: s.gameId,
       gameNumber: s.gameNumber,
+      wordLength: s.wordLength,
       guesses: s.guesses,
       results: s.results,
       status: s.status,

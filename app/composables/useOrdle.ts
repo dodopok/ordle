@@ -1,6 +1,7 @@
 import {
   DEFAULT_MAX_ATTEMPTS,
   DEFAULT_WORD_LENGTH,
+  MAX_ATTEMPTS,
   keyboardState,
   normalize,
   type GameStatus,
@@ -37,6 +38,11 @@ type GuessResponse = {
 
 export function useOrdle(initialMode: Mode = 'normal') {
   const storage = useOrdleStorage()
+
+  // Cada boot tem um número próprio. Se a pessoa trocar de modo enquanto uma
+  // resposta antiga ainda está no ar, a resposta antiga não pode redesenhar o
+  // jogo por cima do modo que está selecionado agora.
+  let bootVersion = 0
 
   const state = reactive({
     gameId: '',
@@ -79,28 +85,64 @@ export function useOrdle(initialMode: Mode = 'normal') {
   const emptyRow = () => Array<string>(state.wordLength).fill('')
 
   const keys = computed(() => keyboardState(state.guesses, state.results))
-  const canType = computed(() => state.status === 'playing' && !state.busy && state.modal === null)
+  const canType = computed(
+    () => state.ready && state.status === 'playing' && !state.busy && state.modal === null,
+  )
 
-  async function boot() {
-    const cached = storage.loadGame(state.mode)
+  const cachedWordLength = (mode: Mode, cached: ReturnType<typeof storage.loadGame>) => {
+    if (mode === 'normal') return DEFAULT_WORD_LENGTH
+    const length = cached?.wordLength ?? cached?.guesses.find(Boolean)?.length
+    return length && length >= 6 && length <= 8 ? length : null
+  }
+
+  async function boot(requestedMode: Mode = state.mode) {
+    const version = ++bootVersion
+    const cached = storage.loadGame(requestedMode)
+    const length = cachedWordLength(requestedMode, cached)
+
+    state.ready = false
+
+    // O normal sempre tem cinco casas. Isso também corrige imediatamente uma
+    // largura antiga do difícil que tenha ficado na memória antes da resposta
+    // do servidor chegar.
+    if (state.mode === requestedMode) {
+      Object.assign(state, {
+        mode: requestedMode,
+        wordLength: length ?? DEFAULT_WORD_LENGTH,
+        maxAttempts: MAX_ATTEMPTS[requestedMode],
+        current: Array<string>(length ?? DEFAULT_WORD_LENGTH).fill(''),
+        cursor: 0,
+      })
+    }
+
     if (cached) {
       // pinta na hora, sem esperar a rede
-      Object.assign(state, {
-        gameId: cached.gameId,
-        gameNumber: cached.gameNumber,
-        guesses: cached.guesses,
-        results: cached.results,
-        status: cached.status,
-        answer: cached.answer,
-        definition: cached.definition,
-      })
+      // No difícil, uma entrada antiga sem `wordLength` só é reaproveitada se
+      // o tamanho puder ser inferido de um palpite já feito.
+      if (length) {
+        Object.assign(state, {
+          gameId: cached.gameId,
+          gameNumber: cached.gameNumber,
+          guesses: cached.guesses,
+          results: cached.results,
+          status: cached.status,
+          answer: cached.answer,
+          definition: cached.definition,
+        })
+      }
     }
 
     try {
       const server = await $fetch<StateResponse>('/api/ordle/state', {
-        query: { mode: state.mode },
+        query: { mode: requestedMode },
       })
-      if (cached && cached.gameId !== server.gameId) storage.clearGame(state.mode)
+
+      // Uma troca de modo iniciou outro boot enquanto este aguardava a rede.
+      // Aplicar esta resposta misturaria a largura de um jogo com o rótulo do
+      // outro, que é justamente o estado impossível que aparece no celular.
+      if (version !== bootVersion || state.mode !== requestedMode) return
+
+      if (cached && cached.gameId !== server.gameId) storage.clearGame(requestedMode)
       Object.assign(state, {
         gameId: server.gameId,
         gameNumber: server.gameNumber,
@@ -122,15 +164,15 @@ export function useOrdle(initialMode: Mode = 'normal') {
         cursor: 0,
         rollover: false,
       })
-      storage.saveGame(state.mode, state)
+      storage.saveGame(requestedMode, state)
       if (state.status !== 'playing') {
-        state.stats = storage.recordResult(state.mode, state)
+        state.stats = storage.recordResult(requestedMode, state)
         state.modal = 'result'
       }
     } catch {
-      bump('Sem conexão com o servidor')
+      if (version === bootVersion && state.mode === requestedMode) bump('Sem conexão com o servidor')
     } finally {
-      state.ready = true
+      if (version === bootVersion && state.mode === requestedMode) state.ready = true
     }
   }
 
@@ -143,10 +185,14 @@ export function useOrdle(initialMode: Mode = 'normal') {
     if (mode === state.mode || state.busy) return
     state.mode = mode
     state.ready = false
+    const cached = storage.loadGame(mode)
+    const length = cachedWordLength(mode, cached)
     Object.assign(state, {
+      wordLength: length ?? DEFAULT_WORD_LENGTH,
+      maxAttempts: MAX_ATTEMPTS[mode],
       guesses: [],
       results: [],
-      current: emptyRow(),
+      current: Array<string>(length ?? DEFAULT_WORD_LENGTH).fill(''),
       cursor: 0,
       status: 'playing' as GameStatus,
       answer: null,
@@ -158,7 +204,7 @@ export function useOrdle(initialMode: Mode = 'normal') {
     // configurações vê a estatística trocar para a do outro modo, em vez de o
     // painel sumir na cara. Se a partida do modo novo já acabou, o `boot`
     // abre o resultado por cima, que é o certo.
-    await boot()
+    await boot(mode)
   }
 
   /**
