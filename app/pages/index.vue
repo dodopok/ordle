@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useOrdle } from '../composables/useOrdle'
 import { useOrdleStorage, type Prefs } from '../composables/useOrdleStorage'
-import { isMode, type Mode } from '../utils/ordle-shared'
+import type { Mode } from '../utils/ordle-shared'
 
 // é um jogo: SEO não importa aqui, e localStorage não existe no SSR
 definePageMeta({ ssr: false })
@@ -47,15 +47,9 @@ const storage = useOrdleStorage()
  * tabuleiro do normal aparecer e ser trocado. A página é `ssr: false`, então
  * o localStorage já existe neste ponto.
  */
-const route = useRoute()
-const storedPrefs = storage.loadPrefs()
-// A URL é o fallback de restauração: alguns navegadores móveis podem limpar
-// ou particionar o localStorage, mas o refresh mantém a rota atual.
-const routeMode = isMode(route.query.mode) ? route.query.mode : null
-const initialMode = routeMode ?? storedPrefs.mode
-const prefs = ref<Prefs>({ ...storedPrefs, mode: initialMode })
+const prefs = ref<Prefs>(storage.loadPrefs())
 
-const { state, keys, type, backspace, submit, focusCell, setMode } = useOrdle(initialMode)
+const { state, keys, type, backspace, submit, focusCell, setMode } = useOrdle(prefs.value.mode)
 
 const systemDark = ref(false)
 
@@ -72,14 +66,6 @@ const dark = computed(() =>
 function updatePrefs(p: Prefs) {
   prefs.value = p
   storage.savePrefs(p)
-}
-
-function persistModeInUrl(mode: Mode) {
-  if (!import.meta.client) return
-  const url = new URL(window.location.href)
-  if (mode === 'hard') url.searchParams.set('mode', mode)
-  else url.searchParams.delete('mode')
-  window.history.replaceState(window.history.state, '', url)
 }
 
 // --- header --------------------------------------------------------------
@@ -118,7 +104,6 @@ const otherDone = computed(() =>
 /** trocar de jogo persiste: quem estava no difícil reabre nele */
 function changeMode(mode: Mode) {
   updatePrefs({ ...prefs.value, mode })
-  persistModeInUrl(mode)
   setMode(mode)
 }
 
