@@ -152,7 +152,6 @@ function openResult() {
       <nav class="hd__modes" aria-label="Jogo de hoje">
         <button
           type="button"
-          :class="{ 'is-on': state.mode === 'normal' }"
           :aria-pressed="state.mode === 'normal'"
           @click="changeMode('normal')"
         >
@@ -160,7 +159,6 @@ function openResult() {
         </button>
         <button
           type="button"
-          :class="{ 'is-on': state.mode === 'hard' }"
           :aria-pressed="state.mode === 'hard'"
           @click="changeMode('hard')"
         >
@@ -294,7 +292,7 @@ function openResult() {
   cursor: pointer;
 }
 
-.hd__modes button.is-on {
+.hd__modes button[aria-pressed='true'] {
   color: var(--ord-ink);
   border-bottom-color: var(--ord-accent);
   font-weight: 600;
