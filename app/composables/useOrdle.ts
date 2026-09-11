@@ -182,9 +182,18 @@ export function useOrdle(initialMode: Mode = 'normal') {
    * para o normal recupera a partida de lá do jeito que ela estava.
    */
   async function setMode(mode: Mode) {
-    if (mode === state.mode || state.busy) return
+    if (state.busy) return
+    const shapeMatchesMode =
+      mode === 'normal'
+        ? state.wordLength === DEFAULT_WORD_LENGTH && state.maxAttempts === DEFAULT_MAX_ATTEMPTS
+        : state.wordLength >= 6 && state.wordLength <= 8 && state.maxAttempts === MAX_ATTEMPTS.hard
+    // Clicar de novo no modo ativo só é ignorado quando o estado visual já é
+    // coerente. Se o normal estiver com a largura do difícil, o clique precisa
+    // poder revalidar a partida.
+    if (mode === state.mode && shapeMatchesMode) return
     state.mode = mode
     state.ready = false
+    state.stats = null
     const cached = storage.loadGame(mode)
     const length = cachedWordLength(mode, cached)
     Object.assign(state, {

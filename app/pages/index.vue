@@ -187,7 +187,7 @@ function openResult() {
 
     <OrdleKeyboard
       :keys="keys"
-      :disabled="state.status !== 'playing' || state.busy"
+      :disabled="!state.ready || state.status !== 'playing' || state.busy"
       @type="type"
       @backspace="backspace"
       @submit="submit"
