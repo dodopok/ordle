@@ -13,6 +13,7 @@ export type AuthView = {
   enabled: boolean
   ready: boolean
   signedIn: boolean
+  profileReady: boolean
   firstName: string
   leaderboardOptIn: boolean
   syncing: boolean
@@ -142,16 +143,22 @@ export function useOrdleAuth() {
     }
 
     const { data } = await supabase.auth.getSession()
+    // O usuário pode existir antes de o perfil retornado pela sincronização.
+    // Enquanto isso, não reutilize a inicial de uma sessão anterior.
+    authProfile.value = null
     authSession.value = data.session
     authUser.value = data.session?.user ?? null
     authReady.value = true
     if (data.session) void syncLocalData()
 
     const listener = supabase.auth.onAuthStateChange((_event, next) => {
+      const previousUserId = authUser.value?.id
       authSession.value = next
       authUser.value = next?.user ?? null
-      if (!next) {
+      if (!next || next.user.id !== previousUserId) {
         authProfile.value = null
+      }
+      if (!next) {
         return
       }
       // Não encadeia chamadas assíncronas dentro do callback do SDK: deixa o

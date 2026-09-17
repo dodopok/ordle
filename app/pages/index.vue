@@ -57,7 +57,8 @@ const authView = computed<AuthView>(() => ({
   enabled: auth.enabled,
   ready: auth.ready.value,
   signedIn: !!auth.user.value,
-  firstName: auth.profile.value?.publicFirstName ?? 'Jogador',
+  profileReady: !!auth.profile.value,
+  firstName: auth.profile.value?.publicFirstName ?? '',
   leaderboardOptIn: !!auth.profile.value?.leaderboardOptIn,
   syncing: auth.syncing.value,
   error: auth.error.value,
@@ -171,15 +172,19 @@ function openAccount() {
           <button type="button" aria-label="Estatísticas" @click="openResult">▤</button>
           <button
             class="hd__account"
-            :class="{ 'hd__account--signed-in': authView.signedIn }"
+            :class="{
+              'hd__account--signed-in': authView.signedIn && authView.profileReady,
+              'hd__account--loading': authView.signedIn && !authView.profileReady,
+            }"
             type="button"
-            :aria-label="authView.signedIn ? `Conta de ${authView.firstName}` : 'Entrar com Google'"
-            :title="authView.signedIn ? `Conta de ${authView.firstName}` : 'Entrar com Google'"
+            :aria-label="authView.signedIn ? (authView.profileReady ? `Conta de ${authView.firstName}` : 'Carregando conta') : 'Entrar com Google'"
+            :title="authView.signedIn ? (authView.profileReady ? `Conta de ${authView.firstName}` : 'Carregando conta') : 'Entrar com Google'"
             @click="openAccount"
           >
-            <span v-if="authView.signedIn" class="hd__avatar" aria-hidden="true">
+            <span v-if="authView.signedIn && authView.profileReady" class="hd__avatar" aria-hidden="true">
               {{ authView.firstName.charAt(0).toUpperCase() }}
             </span>
+            <span v-else-if="authView.signedIn" class="hd__account-loading" aria-hidden="true" />
             <svg v-else class="hd__account-icon" viewBox="0 0 24 24" aria-hidden="true">
               <circle cx="12" cy="8" r="3.25" />
               <path d="M5.5 19.25c.75-3.05 3.02-4.75 6.5-4.75s5.75 1.7 6.5 4.75" />
@@ -419,7 +424,25 @@ function openAccount() {
   letter-spacing: 0;
 }
 
+.hd__account-loading {
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid var(--ord-rule);
+  border-top-color: var(--ord-accent);
+  border-radius: 50%;
+  animation: hd-account-spin 700ms linear infinite;
+}
+
 .hd__account--signed-in { color: var(--ord-ink); }
+.hd__account--loading { color: var(--ord-muted); }
+
+@keyframes hd-account-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hd__account-loading { animation: none; }
+}
 
 @media (hover: hover) {
   .hd__actions button:hover { color: var(--ord-ink); }

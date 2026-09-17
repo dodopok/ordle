@@ -39,6 +39,11 @@ const resultModalSource = readFileSync(
   new URL('../app/components/ordle/ResultModal.vue', import.meta.url),
   'utf8',
 )
+const indexPageSource = readFileSync(new URL('../app/pages/index.vue', import.meta.url), 'utf8')
+const settingsModalSource = readFileSync(
+  new URL('../app/components/ordle/SettingsModal.vue', import.meta.url),
+  'utf8',
+)
 
 describe('grade', () => {
   it('marca acertos exatos', () => {
@@ -459,6 +464,15 @@ describe('resultado da partida', () => {
   it('oferece o ranking diretamente depois de uma vitória', () => {
     expect(resultModalSource).toContain('v-if="status === \'won\'"')
     expect(resultModalSource).toContain('class="ranking" to="/ranking"')
+  })
+})
+
+describe('carregamento da conta', () => {
+  it('não exibe uma inicial provisória antes do perfil sincronizado', () => {
+    expect(indexPageSource).toContain("profileReady: !!auth.profile.value")
+    expect(indexPageSource).toContain('hd__account-loading')
+    expect(indexPageSource).toContain("'Carregando conta'")
+    expect(settingsModalSource).toContain('v-else-if="!auth.profileReady"')
   })
 })
 

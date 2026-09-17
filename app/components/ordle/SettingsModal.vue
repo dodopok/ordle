@@ -50,6 +50,9 @@ function saveName() {
           Entrar com Google
         </button>
       </template>
+      <template v-else-if="!auth.profileReady">
+        <p class="account__hint">Carregando os dados da conta…</p>
+      </template>
       <template v-else>
         <p class="account__hint">
           Conectado como <b>{{ auth.firstName }}</b>.
