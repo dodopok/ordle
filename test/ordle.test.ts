@@ -17,6 +17,7 @@ import { computeLiturgicalDay, easter, extractDay, parseColor } from '../server/
 import { cookieOptions, seal, unseal } from '../server/utils/session'
 import { canonicalGame, sanitizeFirstName, scoreFor } from '../server/utils/account'
 import { betterImportedGame, importedGames } from '../server/utils/account-sync'
+import { aggregateRankingStats } from '../server/utils/ranking'
 import {
   canShareNatively,
   detectPlatform,
@@ -464,6 +465,31 @@ describe('resultado da partida', () => {
   it('oferece o ranking diretamente depois de uma vitória', () => {
     expect(resultModalSource).toContain('v-if="status === \'won\'"')
     expect(resultModalSource).toContain('class="ranking" to="/ranking"')
+  })
+})
+
+describe('ranking agregado', () => {
+  it('converte a distribuição importada em pontos e preserva derrotas nos jogos', () => {
+    expect(
+      aggregateRankingStats([
+        {
+          user_id: 'u1',
+          mode: 'normal',
+          played: 11,
+          wins: 10,
+          distribution: [0, 2, 2, 4, 1, 1],
+        },
+      ]),
+    ).toEqual({ points: 33, wins: 10, played: 11, attempts: 37 })
+  })
+
+  it('soma os dois modos sem perder a pontuação própria do difícil', () => {
+    expect(
+      aggregateRankingStats([
+        { user_id: 'u1', mode: 'normal', played: 1, wins: 1, distribution: [1, 0, 0, 0, 0, 0] },
+        { user_id: 'u1', mode: 'hard', played: 1, wins: 1, distribution: [0, 0, 0, 0, 0, 0, 1] },
+      ]),
+    ).toEqual({ points: 7, wins: 2, played: 2, attempts: 8 })
   })
 })
 

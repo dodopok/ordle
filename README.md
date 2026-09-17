@@ -72,8 +72,9 @@ o login em outro aparelho soma os snapshots em vez de substituir o progresso.
 Partidas do mesmo dia não são somadas cegamente: o servidor recalcula o
 resultado a partir dos palpites e escolhe o estado terminal; entre duas
 vitórias, fica a que usou menos tentativas. Depois do login, partidas novas
-são gravadas server-side. O ranking público considera apenas partidas com
-resultado validado e exibe somente o primeiro nome, mediante opt-in.
+são gravadas server-side. O ranking público usa as estatísticas agregadas
+server-side — inclusive o histórico legado migrado — e exibe somente o
+primeiro nome, mediante opt-in.
 
 ## Scripts
 
