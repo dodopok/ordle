@@ -7,13 +7,24 @@ const error = ref('')
 
 onMounted(async () => {
   const supabase = getSupabaseClient()
-  const code = new URLSearchParams(window.location.search).get('code')
-  if (!supabase || !code) {
+  const params = new URLSearchParams(window.location.search)
+  const code = params.get('code')
+  const oauthError = params.get('error_description') || params.get('error')
+  if (!supabase || oauthError) {
     error.value = 'Não foi possível concluir o login.'
     return
   }
-  const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
-  if (exchangeError) {
+
+  if (code) {
+    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+    if (exchangeError) {
+      error.value = 'Não foi possível concluir o login.'
+      return
+    }
+  }
+
+  const { data, error: sessionError } = await supabase.auth.getSession()
+  if (sessionError || !data.session) {
     error.value = 'Não foi possível concluir o login.'
     return
   }

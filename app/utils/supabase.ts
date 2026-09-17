@@ -11,9 +11,13 @@ export function getSupabaseClient(): SupabaseClient | null {
   if (!client) {
     client = createClient(url, key, {
       auth: {
+        flowType: 'pkce',
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        // O callback do Ordle troca o código explicitamente. Se o SDK também
+        // tentar processá-lo aqui, a URL pode ser limpa antes da página ler o
+        // parâmetro `code`.
+        detectSessionInUrl: false,
       },
     })
   }
