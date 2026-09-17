@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useOrdle } from '../composables/useOrdle'
 import { useOrdleStorage, type Prefs } from '../composables/useOrdleStorage'
+import { useOrdleAuth, type AuthView } from '../composables/useOrdleAuth'
 import type { Mode } from '../utils/ordle-shared'
 
 // é um jogo: SEO não importa aqui, e localStorage não existe no SSR
@@ -39,6 +40,7 @@ useHead({
 })
 
 const storage = useOrdleStorage()
+const auth = useOrdleAuth()
 
 /*
  * As preferências são lidas aqui no setup, e não no onMounted, por causa da
@@ -50,6 +52,21 @@ const storage = useOrdleStorage()
 const prefs = ref<Prefs>(storage.loadPrefs())
 
 const { state, keys, type, backspace, submit, focusCell, setMode } = useOrdle(prefs.value.mode)
+
+const authView = computed<AuthView>(() => ({
+  enabled: auth.enabled,
+  ready: auth.ready.value,
+  signedIn: !!auth.user.value,
+  profileReady: !!auth.profile.value,
+  firstName: auth.profile.value?.publicFirstName ?? '',
+  leaderboardOptIn: !!auth.profile.value?.leaderboardOptIn,
+  syncing: auth.syncing.value,
+  error: auth.error.value,
+}))
+
+watch(auth.syncVersion, () => {
+  if (auth.user.value) void state.boot(state.mode)
+})
 
 const systemDark = ref(false)
 
@@ -66,6 +83,10 @@ const dark = computed(() =>
 function updatePrefs(p: Prefs) {
   prefs.value = p
   storage.savePrefs(p)
+}
+
+function updateProfile(patch: { publicFirstName?: string; leaderboardOptIn?: boolean }) {
+  void auth.updateProfile(patch)
 }
 
 // --- header --------------------------------------------------------------
@@ -116,6 +137,18 @@ function switchToOther() {
 function openResult() {
   state.modal = state.status === 'playing' ? 'settings' : 'result'
 }
+
+function openAccount() {
+  if (!auth.ready.value || !auth.enabled) {
+    state.modal = 'settings'
+    return
+  }
+  if (auth.user.value) {
+    state.modal = 'settings'
+    return
+  }
+  void auth.signInWithGoogle()
+}
 </script>
 
 <template>
@@ -137,6 +170,26 @@ function openResult() {
         <div class="hd__actions">
           <button type="button" aria-label="Como jogar" @click="state.modal = 'help'">?</button>
           <button type="button" aria-label="Estatísticas" @click="openResult">▤</button>
+          <button
+            class="hd__account"
+            :class="{
+              'hd__account--signed-in': authView.signedIn && authView.profileReady,
+              'hd__account--loading': authView.signedIn && !authView.profileReady,
+            }"
+            type="button"
+            :aria-label="authView.signedIn ? (authView.profileReady ? `Conta de ${authView.firstName}` : 'Carregando conta') : 'Entrar com Google'"
+            :title="authView.signedIn ? (authView.profileReady ? `Conta de ${authView.firstName}` : 'Carregando conta') : 'Entrar com Google'"
+            @click="openAccount"
+          >
+            <span v-if="authView.signedIn && authView.profileReady" class="hd__avatar" aria-hidden="true">
+              {{ authView.firstName.charAt(0).toUpperCase() }}
+            </span>
+            <span v-else-if="authView.signedIn" class="hd__account-loading" aria-hidden="true" />
+            <svg v-else class="hd__account-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="8" r="3.25" />
+              <path d="M5.5 19.25c.75-3.05 3.02-4.75 6.5-4.75s5.75 1.7 6.5 4.75" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -209,7 +262,11 @@ function openResult() {
       :stats="stats"
       :prefs="prefs"
       :mode="state.mode"
+      :auth="authView"
       @update="updatePrefs"
+      @login="auth.signInWithGoogle"
+      @logout="auth.signOut"
+      @profile="updateProfile"
       @close="state.modal = null"
     />
 
@@ -343,6 +400,49 @@ function openResult() {
 
 /* no touch não existe hover: o feedback tem que vir do :active */
 .hd__actions button:active { color: var(--ord-ink); background: var(--ord-key); }
+
+.hd__account-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.hd__avatar {
+  width: 1.75rem;
+  height: 1.75rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ord-accent);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.hd__account-loading {
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid var(--ord-rule);
+  border-top-color: var(--ord-accent);
+  border-radius: 50%;
+  animation: hd-account-spin 700ms linear infinite;
+}
+
+.hd__account--signed-in { color: var(--ord-ink); }
+.hd__account--loading { color: var(--ord-muted); }
+
+@keyframes hd-account-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hd__account-loading { animation: none; }
+}
 
 @media (hover: hover) {
   .hd__actions button:hover { color: var(--ord-ink); }

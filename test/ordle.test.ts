@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { WORDS } from '../server/utils/words'
 import { WORDS_HARD } from '../server/utils/words-hard'
@@ -14,6 +15,8 @@ import {
 } from '../server/utils/ordle'
 import { computeLiturgicalDay, easter, extractDay, parseColor } from '../server/utils/liturgy'
 import { cookieOptions, seal, unseal } from '../server/utils/session'
+import { canonicalGame, sanitizeFirstName, scoreFor } from '../server/utils/account'
+import { betterImportedGame, importedGames } from '../server/utils/account-sync'
 import {
   canShareNatively,
   detectPlatform,
@@ -23,6 +26,24 @@ import {
 } from '../app/utils/ordle-shared'
 
 const marks = (guess: string, answer: string) => grade(guess, answer).join(' ')
+
+const accountMigration = readFileSync(
+  new URL('../supabase/migrations/20260916_ordle_accounts.sql', import.meta.url),
+  'utf8',
+)
+const defaultsMigration = readFileSync(
+  new URL('../supabase/migrations/20260916_ordle_defaults_and_sync.sql', import.meta.url),
+  'utf8',
+)
+const resultModalSource = readFileSync(
+  new URL('../app/components/ordle/ResultModal.vue', import.meta.url),
+  'utf8',
+)
+const indexPageSource = readFileSync(new URL('../app/pages/index.vue', import.meta.url), 'utf8')
+const settingsModalSource = readFileSync(
+  new URL('../app/components/ordle/SettingsModal.vue', import.meta.url),
+  'utf8',
+)
 
 describe('grade', () => {
   it('marca acertos exatos', () => {
@@ -309,6 +330,149 @@ describe('modo difícil', () => {
 
   it('nenhuma definição do difícil usa "rezar"', () => {
     expect(WORDS_HARD.filter((w) => /\brez/i.test(w.definition)).map((w) => w.word)).toEqual([])
+  })
+})
+
+describe('conta e migração', () => {
+  it('recalcula uma partida importada sem confiar no status do browser', () => {
+    const gameId = '2026-08-17'
+    const answer = answerFor(Date.parse(`${gameId}T12:00:00-03:00`))
+    const game = canonicalGame(
+      {
+        gameId,
+        mode: 'normal',
+        guesses: [answer.key],
+        status: 'lost',
+        answer: 'resposta adulterada',
+      },
+      'normal',
+    )
+
+    expect(game).not.toBeNull()
+    expect(game?.status).toBe('won')
+    expect(game?.attempts).toBe(1)
+    expect(game?.points).toBe(scoreFor('normal', 'won', 1))
+  })
+
+  it('descarta jogos futuros e exibe somente o primeiro nome', () => {
+    expect(canonicalGame({ gameId: '2099-01-01', guesses: [] }, 'normal')).toBeNull()
+    expect(sanitizeFirstName('  Maria Clara  ')).toBe('Maria')
+  })
+
+  it('rejeita snapshot adulterado e só aceita uma vitória no fim', () => {
+    const gameId = '2026-08-18'
+    const answer = answerFor(Date.parse(`${gameId}T12:00:00-03:00`))
+    expect(canonicalGame({ gameId, guesses: ['errado', answer.key, 'depois'] }, 'normal')).toBeNull()
+    expect(canonicalGame({ gameId, guesses: [`A${'A'.repeat(answer.key.length)}`] }, 'normal')).toBeNull()
+    expect(canonicalGame({ gameId, guesses: Array(7).fill(answer.key) }, 'normal')).toBeNull()
+  })
+
+  it('recalcula derrota e progresso parcial a partir dos palpites', () => {
+    const gameId = '2026-08-19'
+    const answer = answerFor(Date.parse(`${gameId}T12:00:00-03:00`))
+    const miss = answer.key === 'SALMO' ? 'LIVRO' : 'SALMO'
+    const playing = canonicalGame({ gameId, guesses: [miss] }, 'normal')
+    const lost = canonicalGame({ gameId, guesses: Array(6).fill(miss) }, 'normal')
+    expect(playing?.status).toBe('playing')
+    expect(lost?.status).toBe('lost')
+    expect(lost?.points).toBe(0)
+    expect(answer.key).toMatch(/^[A-Z]+$/)
+  })
+
+  it('deduplica histórico e jogo corrente sem misturar normal e difícil', () => {
+    const normalId = '2026-08-20'
+    const hardId = '2026-08-20'
+    const normalAnswer = answerFor(Date.parse(`${normalId}T12:00:00-03:00`), 'normal')
+    const hardAnswer = answerFor(Date.parse(`${hardId}T12:00:00-03:00`), 'hard')
+    const games = importedGames({
+      history: {
+        normal: [
+          { gameId: normalId, guesses: ['SALMO'], updatedAt: '2026-08-20T10:00:00.000Z' },
+          { gameId: normalId, guesses: [normalAnswer.key], updatedAt: '2026-08-20T11:00:00.000Z' },
+        ],
+        hard: [],
+      },
+      games: {
+        normal: { gameId: normalId, guesses: ['SALMO'], updatedAt: '2026-08-20T12:00:00.000Z' },
+        hard: { gameId: hardId, mode: 'hard', guesses: [hardAnswer.key] },
+      },
+    })
+    expect(games).toHaveLength(2)
+    expect(games.find((game) => game.mode === 'normal')?.status).toBe('won')
+    expect(games.find((game) => game.mode === 'hard')?.status).toBe('won')
+  })
+
+  it('prefere uma partida encerrada e não deixa um segundo dispositivo reabrir o dia', () => {
+    const gameId = '2026-08-21'
+    const answer = answerFor(Date.parse(`${gameId}T12:00:00-03:00`))
+    const miss = answer.key === 'SALMO' ? 'LIVRO' : 'SALMO'
+    const partial = canonicalGame({ gameId, guesses: [miss], updatedAt: '2026-08-21T10:00:00.000Z' }, 'normal')!
+    const won = canonicalGame({ gameId, guesses: [answer.key], updatedAt: '2026-08-21T09:00:00.000Z' }, 'normal')!
+    const lost = canonicalGame({ gameId, guesses: Array(6).fill(miss), updatedAt: '2026-08-21T13:00:00.000Z' }, 'normal')!
+    expect(betterImportedGame(partial, won)).toBe(won)
+    expect(betterImportedGame(lost, won)).toBe(won)
+  })
+
+  it('entre duas vitórias, escolhe a que consumiu menos tentativas', () => {
+    const gameId = '2026-08-22'
+    const answer = answerFor(Date.parse(`${gameId}T12:00:00-03:00`))
+    const fast = canonicalGame({ gameId, guesses: [answer.key], updatedAt: '2026-08-22T09:00:00.000Z' }, 'normal')!
+    const miss = answer.key === 'SALMO' ? 'LIVRO' : 'SALMO'
+    const slow = canonicalGame({ gameId, guesses: [miss, answer.key], updatedAt: '2026-08-22T12:00:00.000Z' }, 'normal')!
+    expect(betterImportedGame(slow, fast)).toBe(fast)
+  })
+
+  it('preserva o progresso mais novo quando os dois dispositivos ainda estão jogando', () => {
+    const gameId = '2026-08-23'
+    const answer = answerFor(Date.parse(`${gameId}T12:00:00-03:00`))
+    const miss = answer.key === 'SALMO' ? 'LIVRO' : 'SALMO'
+    const old = canonicalGame({ gameId, guesses: [miss], updatedAt: '2026-08-23T09:00:00.000Z' }, 'normal')!
+    const newer = canonicalGame(
+      { gameId, guesses: [miss, 'TERMO'], updatedAt: '2026-08-23T09:01:00.000Z' },
+      'normal',
+    )!
+    expect(betterImportedGame(old, newer)).toBe(newer)
+  })
+})
+
+describe('contrato SQL da sincronização', () => {
+  it('usa a mesma chave para impedir duas partidas do mesmo dia/modo', () => {
+    expect(accountMigration).toContain('primary key (user_id, game_id, mode)')
+    expect(accountMigration).toContain('unique (user_id, migration_id, mode)')
+  })
+
+  it('torna a importação de um mesmo dispositivo idempotente', () => {
+    expect(accountMigration).toContain(
+      'on conflict (user_id, migration_id, mode) do nothing;',
+    )
+  })
+
+  it('serializa o fechamento da partida e não conta um resultado final duas vezes', () => {
+    expect(accountMigration).toContain(
+      "hashtextextended(p_user_id::text || ':' || p_game_id::text || ':' || p_mode, 0)",
+    )
+    expect(accountMigration).toContain("if current_status in ('won', 'lost') then return false; end if;")
+  })
+
+  it('mantém o ranking ligado por padrão também para a tabela já existente', () => {
+    expect(accountMigration).toContain('leaderboard_opt_in boolean not null default true')
+    expect(defaultsMigration).toContain('alter column leaderboard_opt_in set default true')
+  })
+})
+
+describe('resultado da partida', () => {
+  it('oferece o ranking diretamente depois de uma vitória', () => {
+    expect(resultModalSource).toContain('v-if="status === \'won\'"')
+    expect(resultModalSource).toContain('class="ranking" to="/ranking"')
+  })
+})
+
+describe('carregamento da conta', () => {
+  it('não exibe uma inicial provisória antes do perfil sincronizado', () => {
+    expect(indexPageSource).toContain("profileReady: !!auth.profile.value")
+    expect(indexPageSource).toContain('hd__account-loading')
+    expect(indexPageSource).toContain("'Carregando conta'")
+    expect(settingsModalSource).toContain('v-else-if="!auth.profileReady"')
   })
 })
 

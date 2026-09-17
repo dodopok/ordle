@@ -285,6 +285,11 @@ async function share() {
       </div>
     </template>
 
+    <NuxtLink v-if="status === 'won'" class="ranking" to="/ranking">
+      <span>Ver ranking</span>
+      <span aria-hidden="true">→</span>
+    </NuxtLink>
+
     <!--
       5: o outro jogo do dia.
 
@@ -431,6 +436,27 @@ async function share() {
 }
 
 .dist__bar.is-current { background: var(--ord-correct); }
+
+.ranking {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 2.75rem;
+  margin: 0 0 0.25rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--ord-rule);
+  color: var(--ord-accent);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.ranking:active { color: var(--ord-ink); }
+
+@media (hover: hover) {
+  .ranking:hover { color: var(--ord-ink); }
+}
 
 .footer {
   display: flex;
