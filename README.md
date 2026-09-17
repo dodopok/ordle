@@ -35,6 +35,9 @@ Settings → Environment Variables, nos três ambientes:
 | `ORDLE_LITURGY_KEY` | não | o `APP_INTERNAL_IDENTIFIER` do app. Sem ela o jogo usa o cálculo local |
 | `ORDLE_LITURGY_HEADER` | não | só se sair de `X-App-Internal-Id` |
 | `ORDLE_LITURGY_PRAYER_BOOK` | não | só se sair de `loc_2015` |
+| `NUXT_PUBLIC_SUPABASE_URL` | sim para conta | URL do projeto Supabase |
+| `NUXT_PUBLIC_SUPABASE_KEY` | sim para conta | publishable key, segura para o browser |
+| `NUXT_SUPABASE_SERVICE_ROLE_KEY` | sim para conta | secret key, somente no servidor |
 
 Sem `ORDLE_SECRET` o servidor devolve 500 em vez de assinar com a chave de dev,
 que é pública — ver "fail-closed" abaixo.
@@ -51,6 +54,26 @@ instância: o **rate limit** (30 req/min vira 30 por lambda — na prática mais
 frouxo) e o **cache da cor litúrgica** (cada instância nova paga um round-trip).
 Nenhum dos dois afeta a integridade do jogo; se o rate limit passar a importar,
 troque o Map por Vercel KV.
+
+### Conta, sincronização e ranking
+
+O login usa Google via Supabase Auth. O callback precisa estar permitido em
+Authentication → URL Configuration:
+
+- `https://ordle.oficio.app/auth/callback`
+- `http://localhost:3000/auth/callback`
+
+O Supabase guarda o perfil público, as estatísticas agregadas e o estado das
+partidas. O browser continua funcionando sem conta e mantém o cache local. No
+primeiro login, o client envia um snapshot identificado por **usuário +
+dispositivo + migração**. O banco registra cada migração uma única vez, então
+o login em outro aparelho soma os snapshots em vez de substituir o progresso.
+
+Partidas do mesmo dia não são somadas cegamente: o servidor recalcula o
+resultado a partir dos palpites e escolhe o estado terminal; entre duas
+vitórias, fica a que usou menos tentativas. Depois do login, partidas novas
+são gravadas server-side. O ranking público considera apenas partidas com
+resultado validado e exibe somente o primeiro nome, mediante opt-in.
 
 ## Scripts
 

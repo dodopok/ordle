@@ -5,6 +5,14 @@ export default defineNuxtConfig({
   // pede banner de consentimento. Só coleta rodando na Vercel — em dev e em
   // `node .output/server/index.mjs` o script fica inerte.
   modules: ['@vercel/analytics/nuxt'],
+  runtimeConfig: {
+    supabaseServiceRoleKey:
+      process.env.NUXT_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+    public: {
+      supabaseUrl: process.env.NUXT_PUBLIC_SUPABASE_URL || '',
+      supabaseKey: process.env.NUXT_PUBLIC_SUPABASE_KEY || '',
+    },
+  },
   css: ['~/assets/css/ordle.css'],
   app: {
     head: {

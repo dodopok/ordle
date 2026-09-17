@@ -32,6 +32,7 @@ type GuessResponse = {
   result: Mark[]
   status: GameStatus
   attemptsLeft: number
+  syncPending?: boolean
   answer?: string
   definition?: string
 }
@@ -171,7 +172,11 @@ export function useOrdle(initialMode: Mode = 'normal') {
       })
       storage.saveGame(requestedMode, state)
       if (state.status !== 'playing') {
-        state.stats = storage.recordResult(requestedMode, state)
+        state.stats = storage.recordResult(requestedMode, {
+          ...state,
+          gameNumber: state.gameNumber,
+          wordLength: state.wordLength,
+        })
         state.modal = 'result'
       }
     } catch {
@@ -306,6 +311,7 @@ export function useOrdle(initialMode: Mode = 'normal') {
         method: 'POST',
         body: { guess, mode: state.mode },
       })
+      if (r.syncPending && import.meta.client) window.dispatchEvent(new Event('ordle:sync-needed'))
       const row = state.guesses.length
       state.guesses.push(normalize(guess))
       state.results.push(r.result)
@@ -323,7 +329,11 @@ export function useOrdle(initialMode: Mode = 'normal') {
       const flipDone = state.wordLength * 100 + 320
       if (state.status === 'won') setTimeout(() => (state.win = true), flipDone)
       if (state.status !== 'playing') {
-        state.stats = storage.recordResult(state.mode, state)
+        state.stats = storage.recordResult(state.mode, {
+          ...state,
+          gameNumber: state.gameNumber,
+          wordLength: state.wordLength,
+        })
         setTimeout(() => (state.modal = 'result'), flipDone + 900)
       }
     } catch (e: any) {

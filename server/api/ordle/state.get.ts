@@ -1,6 +1,8 @@
 import { answerFor, gameId, gameNumber, grade, isMode, nextRolloverAt, MAX_ATTEMPTS } from '../../utils/ordle'
 import { cookieName, cookieOptions, seal, unseal, type Session } from '../../utils/session'
 import { liturgicalDay } from '../../utils/liturgy'
+import { optionalUser } from '../../utils/supabase'
+import { gameResponse, readCloudGame } from '../../utils/account'
 
 export default defineEventHandler(async (event) => {
   const now = Date.now()
@@ -19,6 +21,26 @@ export default defineEventHandler(async (event) => {
 
   const answer = answerFor(now, mode)
   const day = await liturgicalDay(id)
+
+  const user = await optionalUser(event)
+  const cloud = user ? await readCloudGame(event, user.id, id, mode) : null
+  if (cloud) {
+    const cloudSession: Session = {
+      id,
+      guesses: cloud.guesses,
+      status: cloud.status,
+      mode,
+    }
+    setCookie(event, cookie, seal(cloudSession), cookieOptions())
+    return {
+      ...gameResponse(cloud),
+      nextRolloverAt: nextRolloverAt(now),
+      liturgicalColor: day.color,
+      liturgicalSeason: day.season,
+      liturgicalCelebration: day.celebration,
+      liturgicalPsalm: day.psalm ?? null,
+    }
+  }
 
   return {
     gameId: id,

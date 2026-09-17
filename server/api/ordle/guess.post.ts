@@ -2,6 +2,8 @@ import { answerFor, gameId, grade, isMode, normalize, MAX_ATTEMPTS } from '../..
 import { isValidGuess } from '../../utils/dictionary'
 import { cookieName, cookieOptions, seal, unseal, type Session } from '../../utils/session'
 import { rateLimit } from '../../utils/ratelimit'
+import { optionalUser, supabaseAdmin } from '../../utils/supabase'
+import { readCloudGame, scoreFor } from '../../utils/account'
 
 export default defineEventHandler(async (event) => {
   rateLimit(event)
@@ -22,8 +24,13 @@ export default defineEventHandler(async (event) => {
 
   const cookie = cookieName(mode)
   const prev = unseal(getCookie(event, cookie))
-  const s: Session =
-    prev?.id === id && prev.mode === mode ? prev : { id, guesses: [], status: 'playing', mode }
+  const user = await optionalUser(event)
+  const cloud = user ? await readCloudGame(event, user.id, id, mode) : null
+  const s: Session = cloud
+    ? { id, guesses: cloud.guesses, status: cloud.status, mode }
+    : prev?.id === id && prev.mode === mode
+      ? prev
+      : { id, guesses: [], status: 'playing', mode }
 
   const max = MAX_ATTEMPTS[mode]
   if (s.status !== 'playing' || s.guesses.length >= max)
@@ -35,10 +42,31 @@ export default defineEventHandler(async (event) => {
 
   setCookie(event, cookie, seal(s), cookieOptions())
 
+  let syncPending = false
+  if (user) {
+    try {
+      const db = supabaseAdmin(event)
+      const { error } = await db.rpc('ordle_record_server_game', {
+        p_user_id: user.id,
+        p_game_id: id,
+        p_mode: mode,
+        p_guesses: s.guesses,
+        p_status: s.status,
+        p_attempts: s.guesses.length,
+        p_points: scoreFor(mode, s.status, s.guesses.length),
+        p_completed_at: s.status === 'playing' ? null : new Date().toISOString(),
+      })
+      if (error) syncPending = true
+    } catch {
+      syncPending = true
+    }
+  }
+
   return {
     result: grade(key, answer.key),
     status: s.status,
     attemptsLeft: max - s.guesses.length,
+    syncPending,
     ...(s.status !== 'playing' && { answer: answer.word, definition: answer.definition }),
   }
 })

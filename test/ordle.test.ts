@@ -14,6 +14,7 @@ import {
 } from '../server/utils/ordle'
 import { computeLiturgicalDay, easter, extractDay, parseColor } from '../server/utils/liturgy'
 import { cookieOptions, seal, unseal } from '../server/utils/session'
+import { canonicalGame, sanitizeFirstName, scoreFor } from '../server/utils/account'
 import {
   canShareNatively,
   detectPlatform,
@@ -309,6 +310,33 @@ describe('modo difícil', () => {
 
   it('nenhuma definição do difícil usa "rezar"', () => {
     expect(WORDS_HARD.filter((w) => /\brez/i.test(w.definition)).map((w) => w.word)).toEqual([])
+  })
+})
+
+describe('conta e migração', () => {
+  it('recalcula uma partida importada sem confiar no status do browser', () => {
+    const gameId = '2026-08-17'
+    const answer = answerFor(Date.parse(`${gameId}T12:00:00-03:00`))
+    const game = canonicalGame(
+      {
+        gameId,
+        mode: 'normal',
+        guesses: [answer.key],
+        status: 'lost',
+        answer: 'resposta adulterada',
+      },
+      'normal',
+    )
+
+    expect(game).not.toBeNull()
+    expect(game?.status).toBe('won')
+    expect(game?.attempts).toBe(1)
+    expect(game?.points).toBe(scoreFor('normal', 'won', 1))
+  })
+
+  it('descarta jogos futuros e exibe somente o primeiro nome', () => {
+    expect(canonicalGame({ gameId: '2099-01-01', guesses: [] }, 'normal')).toBeNull()
+    expect(sanitizeFirstName('  Maria Clara  ')).toBe('Maria')
   })
 })
 

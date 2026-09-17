@@ -49,6 +49,13 @@ export function gameId(now: number = Date.now()): string {
   return new Date(now + TZ_OFFSET_MS).toISOString().slice(0, 10)
 }
 
+/** Converte um gameId ISO em um instante estável dentro daquele dia local. */
+export function timestampForGameId(id: string): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(id)) return null
+  const t = Date.parse(`${id}T12:00:00-03:00`)
+  return Number.isFinite(t) ? t : null
+}
+
 /** Instante (epoch ms, UTC) da próxima virada de dia em America/Sao_Paulo. */
 export function nextRolloverAt(now: number = Date.now()): number {
   const local = now + TZ_OFFSET_MS
@@ -150,6 +157,11 @@ export function answerFor(now: number = Date.now(), mode: Mode = 'normal'): Entr
   const n = mode === 'hard' ? gameNumber(now) - HARD_DEBUT + 1 : gameNumber(now)
   const ord = ORDERS[mode]
   return LISTS[mode][ord[((n % ord.length) + ord.length) % ord.length]]
+}
+
+export function answerForGameId(id: string, mode: Mode = 'normal'): Entry | null {
+  const timestamp = timestampForGameId(id)
+  return timestamp === null ? null : answerFor(timestamp, mode)
 }
 
 /**

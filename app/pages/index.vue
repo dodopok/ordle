@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useOrdle } from '../composables/useOrdle'
 import { useOrdleStorage, type Prefs } from '../composables/useOrdleStorage'
+import { useOrdleAuth, type AuthView } from '../composables/useOrdleAuth'
 import type { Mode } from '../utils/ordle-shared'
 
 // é um jogo: SEO não importa aqui, e localStorage não existe no SSR
@@ -39,6 +40,7 @@ useHead({
 })
 
 const storage = useOrdleStorage()
+const auth = useOrdleAuth()
 
 /*
  * As preferências são lidas aqui no setup, e não no onMounted, por causa da
@@ -50,6 +52,20 @@ const storage = useOrdleStorage()
 const prefs = ref<Prefs>(storage.loadPrefs())
 
 const { state, keys, type, backspace, submit, focusCell, setMode } = useOrdle(prefs.value.mode)
+
+const authView = computed<AuthView>(() => ({
+  enabled: auth.enabled,
+  ready: auth.ready.value,
+  signedIn: !!auth.user.value,
+  firstName: auth.profile.value?.publicFirstName ?? 'Jogador',
+  leaderboardOptIn: !!auth.profile.value?.leaderboardOptIn,
+  syncing: auth.syncing.value,
+  error: auth.error.value,
+}))
+
+watch(auth.syncVersion, () => {
+  if (auth.user.value) void state.boot(state.mode)
+})
 
 const systemDark = ref(false)
 
@@ -66,6 +82,10 @@ const dark = computed(() =>
 function updatePrefs(p: Prefs) {
   prefs.value = p
   storage.savePrefs(p)
+}
+
+function updateProfile(patch: { publicFirstName?: string; leaderboardOptIn?: boolean }) {
+  void auth.updateProfile(patch)
 }
 
 // --- header --------------------------------------------------------------
@@ -209,7 +229,11 @@ function openResult() {
       :stats="stats"
       :prefs="prefs"
       :mode="state.mode"
+      :auth="authView"
       @update="updatePrefs"
+      @login="auth.signInWithGoogle"
+      @logout="auth.signOut"
+      @profile="updateProfile"
       @close="state.modal = null"
     />
 
