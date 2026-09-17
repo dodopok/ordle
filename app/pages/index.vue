@@ -136,6 +136,18 @@ function switchToOther() {
 function openResult() {
   state.modal = state.status === 'playing' ? 'settings' : 'result'
 }
+
+function openAccount() {
+  if (!auth.ready.value || !auth.enabled) {
+    state.modal = 'settings'
+    return
+  }
+  if (auth.user.value) {
+    state.modal = 'settings'
+    return
+  }
+  void auth.signInWithGoogle()
+}
 </script>
 
 <template>
@@ -157,6 +169,22 @@ function openResult() {
         <div class="hd__actions">
           <button type="button" aria-label="Como jogar" @click="state.modal = 'help'">?</button>
           <button type="button" aria-label="Estatísticas" @click="openResult">▤</button>
+          <button
+            class="hd__account"
+            :class="{ 'hd__account--signed-in': authView.signedIn }"
+            type="button"
+            :aria-label="authView.signedIn ? `Conta de ${authView.firstName}` : 'Entrar com Google'"
+            :title="authView.signedIn ? `Conta de ${authView.firstName}` : 'Entrar com Google'"
+            @click="openAccount"
+          >
+            <span v-if="authView.signedIn" class="hd__avatar" aria-hidden="true">
+              {{ authView.firstName.charAt(0).toUpperCase() }}
+            </span>
+            <svg v-else class="hd__account-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="8" r="3.25" />
+              <path d="M5.5 19.25c.75-3.05 3.02-4.75 6.5-4.75s5.75 1.7 6.5 4.75" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -367,6 +395,31 @@ function openResult() {
 
 /* no touch não existe hover: o feedback tem que vir do :active */
 .hd__actions button:active { color: var(--ord-ink); background: var(--ord-key); }
+
+.hd__account-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.hd__avatar {
+  width: 1.75rem;
+  height: 1.75rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ord-accent);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.hd__account--signed-in { color: var(--ord-ink); }
 
 @media (hover: hover) {
   .hd__actions button:hover { color: var(--ord-ink); }
