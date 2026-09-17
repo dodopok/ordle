@@ -8,6 +8,7 @@ import {
   type AccountStats,
   type CanonicalImportedGame,
 } from '../../utils/account'
+import { betterImportedGame, importedGames } from '../../utils/account-sync'
 import {
   answerForGameId,
   gameId,
@@ -63,35 +64,6 @@ function safeDeviceId(value: unknown): string {
   if (typeof value !== 'string' || value.length < 8 || value.length > 120)
     throw createError({ statusCode: 400, statusMessage: 'invalid_device' })
   return value
-}
-
-function terminal(status: string): boolean {
-  return status === 'won' || status === 'lost'
-}
-
-function betterImportedGame(a: CanonicalImportedGame, b: CanonicalImportedGame): CanonicalImportedGame {
-  if (terminal(a.status) !== terminal(b.status)) return terminal(a.status) ? a : b
-  if (a.status !== b.status) return a.status === 'won' ? a : b
-  if (a.status !== 'playing' && a.attempts !== b.attempts) return a.attempts < b.attempts ? a : b
-  return Date.parse(a.updatedAt) >= Date.parse(b.updatedAt) ? a : b
-}
-
-function importedGames(snapshot: SyncSnapshot): CanonicalImportedGame[] {
-  const byKey = new Map<string, CanonicalImportedGame>()
-  for (const mode of MODES) {
-    const values = [
-      ...(Array.isArray(snapshot.history?.[mode]) ? snapshot.history[mode] : []),
-      snapshot.games?.[mode],
-    ]
-    for (const value of values) {
-      const game = canonicalGame(value, mode)
-      if (!game) continue
-      const key = `${game.mode}:${game.gameId}`
-      const previous = byKey.get(key)
-      byKey.set(key, previous ? betterImportedGame(previous, game) : game)
-    }
-  }
-  return [...byKey.values()]
 }
 
 async function importLegacyStats(event: H3Event, userId: string, snapshot: SyncSnapshot) {
