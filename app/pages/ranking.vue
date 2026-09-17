@@ -37,7 +37,7 @@ onMounted(() => void load())
     <header class="ranking-page__head">
       <NuxtLink class="back" to="/">← Ordle</NuxtLink>
       <h1>Ranking</h1>
-      <p>Os melhores resultados dos últimos 30 dias.</p>
+      <p>Resultados acumulados de quem escolheu aparecer.</p>
     </header>
 
     <nav class="modes" aria-label="Modo do ranking">
