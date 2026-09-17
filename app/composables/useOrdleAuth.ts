@@ -37,17 +37,6 @@ type SyncResponse = {
   games: Record<Mode, CloudGame>
 }
 
-const authUser = useState<User | null>('ordle-auth-user', () => null)
-const authSession = useState<Session | null>('ordle-auth-session', () => null)
-const authReady = useState('ordle-auth-ready', () => false)
-const authSyncing = useState('ordle-auth-syncing', () => false)
-const authError = useState('ordle-auth-error', () => '')
-const authProfile = useState<AccountProfile | null>('ordle-auth-profile', () => null)
-const authSyncVersion = useState('ordle-auth-sync-version', () => 0)
-
-let initialized = false
-let unsubscribe: (() => void) | undefined
-
 function firstName(user: User): string {
   const metadata = user.user_metadata ?? {}
   const given = typeof metadata.given_name === 'string' ? metadata.given_name.trim() : ''
@@ -62,6 +51,16 @@ function firstName(user: User): string {
 }
 
 export function useOrdleAuth() {
+  const authUser = useState<User | null>('ordle-auth-user', () => null)
+  const authSession = useState<Session | null>('ordle-auth-session', () => null)
+  const authReady = useState('ordle-auth-ready', () => false)
+  const authSyncing = useState('ordle-auth-syncing', () => false)
+  const authError = useState('ordle-auth-error', () => '')
+  const authProfile = useState<AccountProfile | null>('ordle-auth-profile', () => null)
+  const authSyncVersion = useState('ordle-auth-sync-version', () => 0)
+
+  let initialized = false
+  let unsubscribe: (() => void) | undefined
   const storage = useOrdleStorage()
   const supabase = getSupabaseClient()
 
