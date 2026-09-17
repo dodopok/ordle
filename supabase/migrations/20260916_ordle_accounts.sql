@@ -8,7 +8,7 @@ create table if not exists public.ordle_profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
   public_first_name text not null default 'Jogador'
     check (char_length(public_first_name) between 1 and 32),
-  leaderboard_opt_in boolean not null default false,
+  leaderboard_opt_in boolean not null default true,
   preferences jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

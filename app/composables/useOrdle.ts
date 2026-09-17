@@ -8,6 +8,7 @@ import {
   type Mark,
   type Mode,
 } from '../utils/ordle-shared'
+import { getSupabaseAuthHeaders } from '../utils/supabase'
 import { useOrdleStorage, type Stats } from './useOrdleStorage'
 
 type StateResponse = {
@@ -140,6 +141,7 @@ export function useOrdle(initialMode: Mode = 'normal') {
     try {
       const server = await $fetch<StateResponse>('/api/ordle/state', {
         query: { mode: requestedMode },
+        headers: await getSupabaseAuthHeaders(),
       })
 
       // Uma troca de modo iniciou outro boot enquanto este aguardava a rede.
@@ -307,11 +309,13 @@ export function useOrdle(initialMode: Mode = 'normal') {
 
     state.busy = true
     try {
+      const headers = await getSupabaseAuthHeaders()
       const r = await $fetch<GuessResponse>('/api/ordle/guess', {
         method: 'POST',
         body: { guess, mode: state.mode },
+        headers,
       })
-      if (r.syncPending && import.meta.client) window.dispatchEvent(new Event('ordle:sync-needed'))
+      const syncPending = r.syncPending
       const row = state.guesses.length
       state.guesses.push(normalize(guess))
       state.results.push(r.result)
@@ -324,6 +328,10 @@ export function useOrdle(initialMode: Mode = 'normal') {
         state.definition = r.definition ?? null
       }
       storage.saveGame(state.mode, state)
+      // O snapshot precisa ser exportado depois de o novo palpite estar no
+      // localStorage. Antes disso, uma falha momentânea do RPC podia disparar
+      // a sincronização com o estado anterior e deixar o cloud para trás.
+      if (syncPending && import.meta.client) window.dispatchEvent(new Event('ordle:sync-needed'))
 
       // deixa o flip terminar antes de abrir o modal
       const flipDone = state.wordLength * 100 + 320

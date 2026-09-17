@@ -23,3 +23,16 @@ export function getSupabaseClient(): SupabaseClient | null {
   }
   return client
 }
+
+/**
+ * O Nitro não recebe automaticamente a sessão que o SDK guarda no
+ * localStorage. As APIs de partida precisam do bearer token para ler e gravar
+ * o jogo da conta, inclusive quando a pessoa troca de dispositivo.
+ */
+export async function getSupabaseAuthHeaders(): Promise<Record<string, string>> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return {}
+  const { data, error } = await supabase.auth.getSession()
+  const accessToken = error ? null : data.session?.access_token
+  return accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
+}

@@ -64,6 +64,9 @@ export function useOrdleAuth() {
   const storage = useOrdleStorage()
   const supabase = getSupabaseClient()
 
+  let activeSync: Promise<void> | null = null
+  let syncAgain = false
+
   const headers = () =>
     authSession.value?.access_token
       ? { Authorization: `Bearer ${authSession.value.access_token}` }
@@ -86,23 +89,48 @@ export function useOrdleAuth() {
     authSyncVersion.value++
   }
 
-  async function syncLocalData() {
-    if (!authUser.value || !authSession.value) return
+  async function performSync() {
+    const user = authUser.value
+    const session = authSession.value
+    if (!user || !session) return
     authSyncing.value = true
     authError.value = ''
-    const snapshot = storage.exportSnapshot(authUser.value.id)
+    const snapshot = storage.exportSnapshot(user.id)
     try {
       const response = await $fetch<SyncResponse>('/api/account/sync', {
         method: 'POST',
-        headers: headers(),
+        headers: { Authorization: `Bearer ${session.access_token}` },
         body: snapshot,
       })
-      applySync(response, authUser.value.id, snapshot.migrationId)
+      // Se a pessoa saiu ou trocou de conta enquanto a requisição estava no
+      // ar, a resposta antiga não pode reaparecer no perfil novo.
+      if (authUser.value?.id === user.id) applySync(response, user.id, snapshot.migrationId)
     } catch {
       authError.value = 'Não foi possível sincronizar seus dados ainda.'
     } finally {
       authSyncing.value = false
     }
+  }
+
+  function syncLocalData(): Promise<void> {
+    if (!authUser.value || !authSession.value) return Promise.resolve()
+    if (activeSync) {
+      syncAgain = true
+      return activeSync
+    }
+
+    activeSync = performSync()
+    const current = activeSync
+    const finish = () => {
+      if (activeSync !== current) return
+      activeSync = null
+      if (syncAgain) {
+        syncAgain = false
+        void syncLocalData()
+      }
+    }
+    void current.then(finish, finish)
+    return current
   }
 
   async function initialize() {
@@ -134,6 +162,9 @@ export function useOrdleAuth() {
   }
 
   const requestSync = () => void syncLocalData()
+  const onVisibilityChange = () => {
+    if (!document.hidden) requestSync()
+  }
 
   async function signInWithGoogle() {
     authError.value = ''
@@ -174,10 +205,14 @@ export function useOrdleAuth() {
 
   onMounted(() => {
     window.addEventListener('ordle:sync-needed', requestSync)
+    window.addEventListener('focus', requestSync)
+    document.addEventListener('visibilitychange', onVisibilityChange)
     void initialize()
   })
   onBeforeUnmount(() => {
     window.removeEventListener('ordle:sync-needed', requestSync)
+    window.removeEventListener('focus', requestSync)
+    document.removeEventListener('visibilitychange', onVisibilityChange)
     unsubscribe?.()
     unsubscribe = undefined
   })

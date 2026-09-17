@@ -99,7 +99,11 @@ export async function ensureProfile(event: H3Event, user: User): Promise<Account
 
   const { data: created, error } = await db
     .from('ordle_profiles')
-    .insert({ user_id: user.id, public_first_name: firstNameForUser(user) })
+    .insert({
+      user_id: user.id,
+      public_first_name: firstNameForUser(user),
+      leaderboard_opt_in: true,
+    })
     .select('user_id, public_first_name, leaderboard_opt_in')
     .single()
   if (error || !created) throw createError({ statusCode: 503, statusMessage: 'account_database_error' })
