@@ -135,8 +135,9 @@ resposta de dias já jogados e invalidaria as partidas em andamento, do mesmo
 jeito que mexer em `LAUNCH`. Para acrescentar: as entradas novas vão no **fim**
 de `words.ts` e ganham um **lote novo** em `BATCHES`, com seed própria; lote
 fechado não se estica. A soma dos lotes tem que bater com `WORDS.length` (o
-módulo estoura se não bater) e há teste fixando a sequência dos jogos #1 a #68,
-para essa mudança cair no CI e não em produção.
+módulo estoura se não bater) e há teste fixando a sequência dos jogos #1 a #68
+do normal e do primeiro lote inteiro do difícil, para essa mudança cair no CI e
+não em produção. Vale para os dois modos: o difícil tem `BATCHES` próprio.
 
 **`LAUNCH` não se mexe com o jogo no ar.** Essa constante numera os dias *e*
 indexa a resposta. Mudá-la depois da estreia renumera todo mundo (o "#142" que
@@ -189,9 +190,9 @@ pequeno, não só filete.
 ## As listas de palavras
 
 - `server/utils/words.ts` — as respostas do modo normal, curadas, com
-  definição. 154 termos de 5 letras ≈ cinco meses de jogo.
-- `server/utils/words-hard.ts` — as respostas do modo difícil: 69 termos de 6 a
-  8 letras, equilibrados entre os três comprimentos.
+  definição. 194 termos de 5 letras ≈ seis meses e meio de jogo.
+- `server/utils/words-hard.ts` — as respostas do modo difícil: 135 termos de 6
+  a 8 letras, equilibrados entre os três comprimentos.
 - `server/utils/pt-{5,6,7,8}.json` — os palpites válidos, um arquivo por
   comprimento: 19,6 mil palavras de 5 letras, 49,6 mil de 6, 100 mil de 7 e
   169 mil de 8, do dicionário Hunspell pt_BR (VERO/LibreOffice), com os afixos
