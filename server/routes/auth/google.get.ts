@@ -6,7 +6,7 @@ export default defineOAuthGoogleEventHandler({
   async onSuccess(event, { user }) {
     // A conta é vinculada ao identificador estável do Google, nunca ao e-mail.
     if (typeof user.sub !== 'string' || !user.sub || user.email_verified !== true) {
-      return sendRedirect(event, '/auth/callback?error=google')
+      return sendRedirect(event, '/auth/callback?error=identity')
     }
     const firstName = sanitizeFirstName(user.given_name || user.name || 'Jogador')
     const sql = accountDatabase()
@@ -21,7 +21,12 @@ export default defineOAuthGoogleEventHandler({
     })
     return sendRedirect(event, '/')
   },
-  onError(event) {
-    return sendRedirect(event, '/auth/callback?error=google')
+  onError(event, error) {
+    const reason = error.message?.includes('state mismatch')
+      ? 'state'
+      : error.statusCode === 401 ? 'credentials' : 'configuration'
+    // Registra só a categoria; códigos OAuth, tokens e segredos ficam fora do log.
+    console.warn('[ordle-auth] Google OAuth failed:', reason)
+    return sendRedirect(event, `/auth/callback?error=${reason}`)
   },
 })

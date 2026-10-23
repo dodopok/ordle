@@ -72,7 +72,7 @@ try {
   assert.equal(authUrl.origin, 'https://accounts.google.com')
   assert.ok(authUrl.searchParams.get('state'))
   const badCallback = await fetch(`${base}/auth/google?code=fake&state=fake`, { redirect: 'manual' })
-  assert.equal(badCallback.headers.get('location'), '/auth/callback?error=google')
+  assert.equal(badCallback.headers.get('location'), '/auth/callback?error=state')
 
   const snapshot = { v: 1, migrationId: 'ordle-test-migration', deviceId: 'ordle-test-device',
     stats: {
