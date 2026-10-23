@@ -2,20 +2,18 @@ import { type H3Event } from 'h3'
 import { requireUser } from '../../utils/auth'
 import { accountDatabase, databaseOperation } from '../../utils/database'
 import {
-  canonicalGame,
   ensureProfile,
   readAccountStats,
   readCloudGame,
   type AccountStats,
   type CanonicalImportedGame,
 } from '../../utils/account'
-import { betterImportedGame, importedGames } from '../../utils/account-sync'
+import { importedGames } from '../../utils/account-sync'
 import {
   answerForGameId,
   gameId,
   gameNumber,
   grade,
-  isMode,
   MAX_ATTEMPTS,
   timestampForGameId,
   type Mode,
@@ -84,30 +82,33 @@ async function importLegacyStats(event: H3Event, userId: string, snapshot: SyncS
 async function importGames(event: H3Event, userId: string, incoming: CanonicalImportedGame[]) {
   if (!incoming.length) return
   const sql = accountDatabase()
-  for (const game of incoming) {
-    await databaseOperation(() => sql.begin(async (tx) => {
-      // Usa a mesma trava da gravação do servidor, inclusive quando a linha
-      // ainda não existe. Um snapshot nunca sobrescreve um jogo do servidor.
-      await tx`select pg_advisory_xact_lock(hashtextextended(
-        ${userId + ':' + game.gameId + ':' + game.mode}, 0))`
-      const [old] = await tx`select * from ordle_player_games
-        where user_id = ${userId} and game_id = ${game.gameId} and mode = ${game.mode} for update`
-      if (old?.source === 'server') return
-      const oldCanonical = old ? canonicalGame({
-        gameId: old.game_id, mode: old.mode, guesses: old.guesses, updatedAt: old.updated_at,
-      }, game.mode) : null
-      const chosen = oldCanonical ? betterImportedGame(oldCanonical, game) : game
-      await tx`insert into ordle_player_games
-        (user_id, game_id, mode, guesses, status, attempts, points, source, updated_at, completed_at)
-        values (${userId}, ${chosen.gameId}, ${chosen.mode}, ${tx.json(chosen.guesses)},
-          ${chosen.status}, ${chosen.attempts}, ${chosen.points}, 'imported',
-          ${chosen.updatedAt}, ${chosen.completedAt})
-        on conflict (user_id, game_id, mode) do update set
-          guesses = excluded.guesses, status = excluded.status, attempts = excluded.attempts,
-          points = excluded.points, updated_at = excluded.updated_at, completed_at = excluded.completed_at
-        where ordle_player_games.source = 'imported'`
-    }))
-  }
+  const rows = incoming.map((game) => ({
+    game_id: game.gameId, mode: game.mode, guesses: game.guesses, status: game.status,
+    attempts: game.attempts, points: game.points,
+    updated_at: game.updatedAt, completed_at: game.completedAt,
+  }))
+  // Uma ida ao banco para todo o histórico. ON CONFLICT trava a linha e
+  // reavalia a condição após gravações concorrentes, preservando jogos do
+  // servidor. A ordem fixa evita travas cruzadas entre dois dispositivos.
+  await databaseOperation(() => sql`insert into ordle_player_games as stored
+    (user_id, game_id, mode, guesses, status, attempts, points, source, updated_at, completed_at)
+    select ${userId}::uuid, game_id, mode, guesses, status, attempts, points, 'imported', updated_at, completed_at
+    from jsonb_to_recordset(${sql.json(rows)}::jsonb) as games(
+      game_id date, mode text, guesses jsonb, status text, attempts smallint,
+      points smallint, updated_at timestamptz, completed_at timestamptz
+    ) order by game_id, mode
+    on conflict (user_id, game_id, mode) do update set
+      guesses = excluded.guesses, status = excluded.status, attempts = excluded.attempts,
+      points = excluded.points, updated_at = excluded.updated_at, completed_at = excluded.completed_at
+    where stored.source = 'imported' and case
+      -- Mesma precedência de betterImportedGame; versões iguais não são regravadas.
+      when stored.status = 'playing' and excluded.status <> 'playing' then true
+      when stored.status <> 'playing' and excluded.status = 'playing' then false
+      when stored.status <> excluded.status then excluded.status = 'won'
+      when excluded.status <> 'playing' and stored.attempts <> excluded.attempts
+        then excluded.attempts < stored.attempts
+      else excluded.updated_at > stored.updated_at
+    end`)
 }
 
 function responseGame(row: Awaited<ReturnType<typeof readCloudGame>>) {
