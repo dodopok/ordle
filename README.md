@@ -35,9 +35,12 @@ Settings → Environment Variables, nos três ambientes:
 | `ORDLE_LITURGY_KEY` | não | o `APP_INTERNAL_IDENTIFIER` do app. Sem ela o jogo usa o cálculo local |
 | `ORDLE_LITURGY_HEADER` | não | só se sair de `X-App-Internal-Id` |
 | `ORDLE_LITURGY_PRAYER_BOOK` | não | só se sair de `loc_2015` |
-| `NUXT_PUBLIC_SUPABASE_URL` | sim para conta | URL do projeto Supabase |
-| `NUXT_PUBLIC_SUPABASE_KEY` | sim para conta | publishable key, segura para o browser |
-| `NUXT_SUPABASE_SERVICE_ROLE_KEY` | sim para conta | secret key, somente no servidor |
+| `DATABASE_URL` | sim para conta | conexão PostgreSQL privada, somente no servidor |
+| `NUXT_PUBLIC_ACCOUNTS_ENABLED` | sim para conta | `true` após configurar banco e Google |
+| `NUXT_SESSION_PASSWORD` | sim | chave separada, com 32+ caracteres, para a sessão de login |
+| `NUXT_OAUTH_GOOGLE_CLIENT_ID` | sim para conta | ID do cliente OAuth Google |
+| `NUXT_OAUTH_GOOGLE_CLIENT_SECRET` | sim para conta | segredo OAuth, somente no servidor |
+| `NUXT_OAUTH_GOOGLE_REDIRECT_URL` | sim para conta | `https://ordle.oficio.app/auth/google` |
 
 Sem `ORDLE_SECRET` o servidor devolve 500 em vez de assinar com a chave de dev,
 que é pública — ver "fail-closed" abaixo.
@@ -57,14 +60,18 @@ troque o Map por Vercel KV.
 
 ### Conta, sincronização e ranking
 
-O login usa Google via Supabase Auth. O callback precisa estar permitido em
-Authentication → URL Configuration:
+O login usa Google diretamente, com sessão em cookie HttpOnly pelo
+`nuxt-auth-utils`. Autorize o callback no cliente OAuth do Google Cloud:
 
-- `https://ordle.oficio.app/auth/callback`
-- `http://localhost:3000/auth/callback`
+- `https://ordle.oficio.app/auth/google`
+- `http://localhost:3000/auth/google` (desenvolvimento)
 
-O Supabase guarda o perfil público, as estatísticas agregadas e o estado das
-partidas. O browser continua funcionando sem conta e mantém o cache local. No
+Um PostgreSQL privado guarda a identificação Google, o perfil público, as
+estatísticas agregadas e o estado das partidas. A conta se vincula ao `sub`
+do Google, preservando os UUIDs existentes; o e-mail não identifica a conta.
+O procedimento de importação está em [docs/migracao-railway.md](docs/migracao-railway.md).
+
+ O browser continua funcionando sem conta e mantém o cache local. No
 primeiro login, o client envia um snapshot identificado por **usuário +
 dispositivo + migração**. O banco registra cada migração uma única vez, então
 o login em outro aparelho soma os snapshots em vez de substituir o progresso.

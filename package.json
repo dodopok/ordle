@@ -9,14 +9,16 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "test": "vitest run",
+    "test:postgres": "node scripts/test-postgres.mjs",
     "check:leak": "node scripts/check-leak.mjs",
     "dictionary": "node scripts/build-dictionary.mjs",
     "verify": "vitest run && nuxt build && node scripts/check-leak.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.57.0",
     "@vercel/analytics": "^2.0.1",
     "nuxt": "^4.5.2",
+    "nuxt-auth-utils": "0.5.32",
+    "postgres": "3.4.9",
     "vue": "^3.5.0",
     "vue-router": "^4.4.0"
   },

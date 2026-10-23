@@ -1,4 +1,4 @@
-import type { User } from '@supabase/supabase-js'
+import type { AccountUser } from './auth'
 import { createError, type H3Event } from 'h3'
 import {
   answerForGameId,
@@ -11,7 +11,7 @@ import {
   timestampForGameId,
   type Mode,
 } from './ordle'
-import { supabaseAdmin } from './supabase'
+import { accountDatabase, databaseOperation } from './database'
 
 type GameStatus = 'playing' | 'won' | 'lost'
 
@@ -60,19 +60,6 @@ export function scoreFor(mode: Mode, status: GameStatus, attempts: number): numb
   return status === 'won' ? Math.max(0, MAX_ATTEMPTS[mode] + 1 - attempts) : 0
 }
 
-export function firstNameForUser(user: User): string {
-  const metadata = user.user_metadata ?? {}
-  const source =
-    typeof metadata.given_name === 'string'
-      ? metadata.given_name
-      : typeof metadata.full_name === 'string'
-        ? metadata.full_name
-        : typeof metadata.name === 'string'
-          ? metadata.name
-          : ''
-  return source.trim().split(/\s+/)[0]?.slice(0, 32) || 'Jogador'
-}
-
 export function sanitizeFirstName(value: unknown): string {
   if (typeof value !== 'string') throw createError({ statusCode: 400, statusMessage: 'invalid_name' })
   const name = value.trim().replace(/\s+/g, ' ').split(' ')[0] ?? ''
@@ -81,36 +68,19 @@ export function sanitizeFirstName(value: unknown): string {
   return name
 }
 
-export async function ensureProfile(event: H3Event, user: User): Promise<AccountProfile> {
-  const db = supabaseAdmin(event)
-  const { data: existing, error: readError } = await db
-    .from('ordle_profiles')
-    .select('user_id, public_first_name, leaderboard_opt_in')
-    .eq('user_id', user.id)
-    .maybeSingle()
-  if (readError) throw createError({ statusCode: 503, statusMessage: 'account_database_error' })
-  if (existing) {
-    return {
-      userId: existing.user_id,
-      publicFirstName: existing.public_first_name,
-      leaderboardOptIn: !!existing.leaderboard_opt_in,
-    }
-  }
-
-  const { data: created, error } = await db
-    .from('ordle_profiles')
-    .insert({
-      user_id: user.id,
-      public_first_name: firstNameForUser(user),
-      leaderboard_opt_in: true,
-    })
-    .select('user_id, public_first_name, leaderboard_opt_in')
-    .single()
-  if (error || !created) throw createError({ statusCode: 503, statusMessage: 'account_database_error' })
+export async function ensureProfile(event: H3Event, user: AccountUser): Promise<AccountProfile> {
+  const sql = accountDatabase()
+  const data = await databaseOperation(async () => {
+    await sql`insert into ordle_profiles (user_id, public_first_name)
+      values (${user.id}, ${user.firstName}) on conflict (user_id) do nothing`
+    const [row] = await sql`select user_id, public_first_name, leaderboard_opt_in
+      from ordle_profiles where user_id = ${user.id}`
+    return row!
+  })
   return {
-    userId: created.user_id,
-    publicFirstName: created.public_first_name,
-    leaderboardOptIn: !!created.leaderboard_opt_in,
+    userId: data.user_id,
+    publicFirstName: data.public_first_name,
+    leaderboardOptIn: !!data.leaderboard_opt_in,
   }
 }
 
@@ -120,27 +90,20 @@ export async function readCloudGame(
   gameId: string,
   mode: Mode,
 ): Promise<CloudGameRow | null> {
-  const db = supabaseAdmin(event)
-  const { data, error } = await db
-    .from('ordle_player_games')
-    .select('user_id, game_id, mode, guesses, status, attempts, points, source, updated_at, completed_at')
-    .eq('user_id', userId)
-    .eq('game_id', gameId)
-    .eq('mode', mode)
-    .maybeSingle()
-  if (error) throw createError({ statusCode: 503, statusMessage: 'account_database_error' })
-  return data as CloudGameRow | null
+  const sql = accountDatabase()
+  const [row] = await databaseOperation(() => sql<CloudGameRow[]>`
+    select user_id, game_id, mode, guesses, status, attempts, points, source, updated_at, completed_at
+    from ordle_player_games where user_id = ${userId} and game_id = ${gameId} and mode = ${mode}
+  `)
+  return row ?? null
 }
 
 export async function readAccountStats(event: H3Event, userId: string, mode: Mode): Promise<AccountStats> {
-  const db = supabaseAdmin(event)
-  const { data, error } = await db
-    .from('ordle_stats')
-    .select('played, wins, streak, max_streak, distribution, last_game_id, last_result')
-    .eq('user_id', userId)
-    .eq('mode', mode)
-    .maybeSingle()
-  if (error) throw createError({ statusCode: 503, statusMessage: 'account_database_error' })
+  const sql = accountDatabase()
+  const [data] = await databaseOperation(() => sql`
+    select played, wins, streak, max_streak, distribution, last_game_id, last_result
+    from ordle_stats where user_id = ${userId} and mode = ${mode}
+  `)
   if (!data) return emptyAccountStats(mode)
   return {
     v: 1,

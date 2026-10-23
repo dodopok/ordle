@@ -8,7 +8,6 @@ import {
   type Mark,
   type Mode,
 } from '../utils/ordle-shared'
-import { getSupabaseAuthHeaders } from '../utils/supabase'
 import { useOrdleStorage, type Stats } from './useOrdleStorage'
 
 type StateResponse = {
@@ -141,7 +140,6 @@ export function useOrdle(initialMode: Mode = 'normal') {
     try {
       const server = await $fetch<StateResponse>('/api/ordle/state', {
         query: { mode: requestedMode },
-        headers: await getSupabaseAuthHeaders(),
       })
 
       // Uma troca de modo iniciou outro boot enquanto este aguardava a rede.
@@ -309,11 +307,9 @@ export function useOrdle(initialMode: Mode = 'normal') {
 
     state.busy = true
     try {
-      const headers = await getSupabaseAuthHeaders()
       const r = await $fetch<GuessResponse>('/api/ordle/guess', {
         method: 'POST',
         body: { guess, mode: state.mode },
-        headers,
       })
       const syncPending = r.syncPending
       const row = state.guesses.length

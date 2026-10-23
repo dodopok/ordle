@@ -2,7 +2,8 @@ import { answerFor, gameId, grade, isMode, normalize, MAX_ATTEMPTS } from '../..
 import { isValidGuess } from '../../utils/dictionary'
 import { cookieName, cookieOptions, seal, unseal, type Session } from '../../utils/session'
 import { rateLimit } from '../../utils/ratelimit'
-import { optionalUser, supabaseAdmin } from '../../utils/supabase'
+import { optionalUser } from '../../utils/auth'
+import { accountDatabase } from '../../utils/database'
 import { readCloudGame, scoreFor } from '../../utils/account'
 
 export default defineEventHandler(async (event) => {
@@ -45,18 +46,12 @@ export default defineEventHandler(async (event) => {
   let syncPending = false
   if (user) {
     try {
-      const db = supabaseAdmin(event)
-      const { error } = await db.rpc('ordle_record_server_game', {
-        p_user_id: user.id,
-        p_game_id: id,
-        p_mode: mode,
-        p_guesses: s.guesses,
-        p_status: s.status,
-        p_attempts: s.guesses.length,
-        p_points: scoreFor(mode, s.status, s.guesses.length),
-        p_completed_at: s.status === 'playing' ? null : new Date().toISOString(),
-      })
-      if (error) syncPending = true
+      const sql = accountDatabase()
+      await sql`select ordle_record_server_game(
+        ${user.id}::uuid, ${id}::date, ${mode}, ${sql.json(s.guesses)}, ${s.status},
+        ${s.guesses.length}::integer, ${scoreFor(mode, s.status, s.guesses.length)}::integer,
+        ${s.status === 'playing' ? null : new Date().toISOString()}::timestamptz
+      )`
     } catch {
       syncPending = true
     }
