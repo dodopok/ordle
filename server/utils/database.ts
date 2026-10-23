@@ -12,6 +12,11 @@ export function accountDatabase() {
       idle_timeout: 10,
       connect_timeout: 10,
       max_lifetime: 60 * 5,
+      connection: {
+        application_name: 'ordle',
+        statement_timeout: 10_000,
+        lock_timeout: 5_000,
+      },
       // Datas dos jogos são datas civis de São Paulo, nunca timestamps UTC.
       types: {
         date: { to: 1082, from: [1082], serialize: String, parse: String },

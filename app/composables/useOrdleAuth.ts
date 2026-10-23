@@ -49,6 +49,7 @@ export function useOrdleAuth() {
   const enabled = !!useRuntimeConfig().public.accountsEnabled
 
   let activeSync: Promise<void> | null = null
+  let activeRefresh: Promise<void> | null = null
   let syncAgain = false
 
   function applySync(response: SyncResponse, userId: string, migrationId: string) {
@@ -73,11 +74,13 @@ export function useOrdleAuth() {
     if (!user) return
     authSyncing.value = true
     authError.value = ''
-    const snapshot = storage.exportSnapshot(user.id)
     try {
+      const snapshot = storage.exportSnapshot(user.id)
       const response = await $fetch<SyncResponse>('/api/account/sync', {
         method: 'POST',
         body: snapshot,
+        timeout: 15_000,
+        retry: 0,
       })
       // Se a pessoa saiu ou trocou de conta enquanto a requisição estava no
       // ar, a resposta antiga não pode reaparecer no perfil novo.
@@ -111,12 +114,25 @@ export function useOrdleAuth() {
     return current
   }
 
-  async function refreshAccount() {
-    if (!enabled) return
-    const previousUserId = authUser.value?.id
-    await fetchSession()
-    if (authUser.value?.id !== previousUserId) authProfile.value = null
-    await syncLocalData()
+  function refreshAccount(): Promise<void> {
+    if (!enabled) return Promise.resolve()
+    // Voltar ao app dispara focus e visibilitychange juntos em alguns browsers.
+    if (activeRefresh) return activeRefresh
+    const current = (async () => {
+      try {
+        const previousUserId = authUser.value?.id
+        await fetchSession()
+        if (authUser.value?.id !== previousUserId) authProfile.value = null
+        await syncLocalData()
+      } catch {
+        authError.value = 'Não foi possível atualizar sua conta ainda.'
+      }
+    })()
+    activeRefresh = current
+    void current.then(() => {
+      if (activeRefresh === current) activeRefresh = null
+    })
+    return current
   }
 
   async function initialize() {
@@ -130,6 +146,7 @@ export function useOrdleAuth() {
   }
 
   const requestSync = () => void refreshAccount()
+  const onDataChange = () => void syncLocalData()
   const onVisibilityChange = () => {
     if (!document.hidden) requestSync()
   }
@@ -155,6 +172,8 @@ export function useOrdleAuth() {
       const response = await $fetch<{ profile: AccountProfile }>('/api/account/profile', {
         method: 'PATCH',
         body: patch,
+        timeout: 15_000,
+        retry: 0,
       })
       authProfile.value = response.profile
     } catch {
@@ -163,13 +182,13 @@ export function useOrdleAuth() {
   }
 
   onMounted(() => {
-    window.addEventListener('ordle:sync-needed', requestSync)
+    window.addEventListener('ordle:sync-needed', onDataChange)
     window.addEventListener('focus', requestSync)
     document.addEventListener('visibilitychange', onVisibilityChange)
     void initialize()
   })
   onBeforeUnmount(() => {
-    window.removeEventListener('ordle:sync-needed', requestSync)
+    window.removeEventListener('ordle:sync-needed', onDataChange)
     window.removeEventListener('focus', requestSync)
     document.removeEventListener('visibilitychange', onVisibilityChange)
   })

@@ -32,7 +32,7 @@ export function betterImportedGame(
 
 /**
  * Converte o histórico e o jogo corrente do browser para partidas canônicas,
- * removendo duplicatas por modo + dia antes de falar com o Supabase.
+ * removendo duplicatas por modo + dia antes de falar com o banco.
  */
 export function importedGames(snapshot: SnapshotLike): CanonicalImportedGame[] {
   const byKey = new Map<string, CanonicalImportedGame>()

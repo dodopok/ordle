@@ -4,6 +4,8 @@ import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { spawn } from 'node:child_process'
+import { createServer as createTcpServer, connect } from 'node:net'
+import { Transform } from 'node:stream'
 import { createApp, eventHandler, toNodeListener, useSession } from 'h3'
 import postgres from 'postgres'
 
@@ -19,6 +21,8 @@ const subject = `local-test-${id}`
 const password = randomUUID() + randomUUID()
 let app
 let signer
+let proxy
+const sockets = new Set()
 let logs = ''
 try {
   await sql.unsafe(await readFile(new URL('../database/schema.sql', import.meta.url), 'utf8'))
@@ -41,9 +45,28 @@ try {
   const cookie = signed.headers.get('set-cookie').split(';')[0]
   assert.match(signed.headers.get('set-cookie'), /HttpOnly/i)
 
+  // 60 ms de ida e volta entre aplicação e banco: o custo do histórico não
+  // pode crescer uma transação de rede para cada partida já sincronizada.
+  const delay = () => new Transform({
+    transform(chunk, _encoding, done) { setTimeout(() => done(null, chunk), 30) },
+  })
+  proxy = createTcpServer((client) => {
+    const upstream = connect({ host: url.hostname, port: Number(url.port || 5432) })
+    for (const socket of [client, upstream]) {
+      sockets.add(socket)
+      socket.on('close', () => sockets.delete(socket))
+      socket.on('error', () => { client.destroy(); upstream.destroy() })
+    }
+    client.pipe(delay()).pipe(upstream)
+    upstream.pipe(delay()).pipe(client)
+  })
+  await new Promise((resolve) => proxy.listen(0, '127.0.0.1', resolve))
+  const appDatabaseUrl = new URL(url)
+  appDatabaseUrl.port = String(proxy.address().port)
+
   const base = 'http://127.0.0.1:3098'
   app = spawn(process.execPath, ['.output/server/index.mjs'], {
-    env: { ...process.env, HOST: '127.0.0.1', PORT: '3098',
+    env: { ...process.env, HOST: '127.0.0.1', PORT: '3098', DATABASE_URL: appDatabaseUrl.href,
       ORDLE_SECRET: password, NUXT_SESSION_PASSWORD: password,
       NUXT_PUBLIC_ACCOUNTS_ENABLED: 'true',
       NUXT_OAUTH_GOOGLE_CLIENT_ID: 'local-test',
@@ -60,9 +83,10 @@ try {
     await new Promise((resolve) => setTimeout(resolve, 100))
   }
   assert.ok(ready, `servidor não iniciou: ${logs}`)
-  const request = (path, body, method = 'POST', extra = {}) => fetch(base + path, {
+  const request = (path, body, method = 'POST', extra = {}, signal) => fetch(base + path, {
     method, headers: { cookie, 'content-type': 'application/json', ...extra },
     ...(body !== undefined && { body: JSON.stringify(body) }),
+    signal,
   })
   assert.equal((await fetch(`${base}/api/account/profile`, { method: 'PATCH' })).status, 401)
   assert.equal((await request('/api/account/profile', {}, 'PATCH', { origin: 'https://other.example' })).status, 403)
@@ -99,6 +123,41 @@ try {
   })
   assert.deepEqual((await resync.json()).games.normal.guesses, ['SALMO'], 'snapshot não deve sobrescrever a gravação do servidor')
 
+  const history = Array.from({ length: 50 }, (_, index) => ({
+    gameId: new Date(Date.UTC(2026, 7, 18 + index)).toISOString().slice(0, 10),
+    mode: 'normal', guesses: ['SALMO'], updatedAt: '2026-10-23T12:00:00Z',
+  }))
+  const largeSnapshot = { ...snapshot, history: { normal: history, hard: [] } }
+  const syncStarted = performance.now()
+  const bulk = await request('/api/account/sync', largeSnapshot, 'POST', {}, AbortSignal.timeout(6000))
+  assert.equal(bulk.status, 200, await bulk.clone().text())
+  const bulkMs = Math.round(performance.now() - syncStarted)
+  const [imported] = await sql`select count(*)::int as count from ordle_player_games where user_id=${id} and source='imported'`
+  assert.equal(imported.count, history.length)
+  const beforeRepeat = await sql`select game_id, guesses, status, updated_at, xmin::text as version
+    from ordle_player_games where user_id=${id} order by game_id, mode`
+  const repeats = await Promise.all([
+    request('/api/account/sync', largeSnapshot),
+    request('/api/account/sync', { ...largeSnapshot, history: { normal: [...history].reverse(), hard: [] } }),
+  ])
+  for (const repeated of repeats) assert.equal(repeated.status, 200, await repeated.clone().text())
+  const afterRepeat = await sql`select game_id, guesses, status, updated_at, xmin::text as version
+    from ordle_player_games where user_id=${id} order by game_id, mode`
+  assert.deepEqual(afterRepeat, beforeRepeat, 'snapshots idênticos concorrentes não devem regravar as partidas')
+
+  // Um jogo encerrado prevalece sobre progresso parcial mais recente.
+  const ended = { ...history[0], guesses: Array(6).fill('LIVRO') }
+  const terminal = await request('/api/account/sync', { ...snapshot, history: { normal: [ended], hard: [] } })
+  assert.equal(terminal.status, 200)
+  const stale = await request('/api/account/sync', { ...snapshot,
+    history: { normal: [{ ...history[0], updatedAt: '2026-10-23T13:00:00Z' }], hard: [] },
+  })
+  assert.equal(stale.status, 200)
+  const [preserved] = await sql`select status, guesses from ordle_player_games
+    where user_id=${id} and game_id=${history[0].gameId} and mode='normal'`
+  assert.equal(preserved.status, 'lost')
+  assert.deepEqual(preserved.guesses, ended.guesses)
+
   const [before] = await sql`select played from ordle_stats where user_id=${id} and mode='normal'`
   const finish = () => sql`select ordle_record_server_game(${id}::uuid, '2026-08-17'::date,
     'normal', ${sql.json(['SALMO', 'CREDO'])}, 'won', 2, 5, now())`
@@ -121,10 +180,13 @@ try {
   const ranking = await (await fetch(`${base}/api/ranking`)).json()
   assert.equal(ranking.entries.some((entry) => entry.firstName === 'Pessoa'), false)
   assert.equal((await request('/api/_auth/session', undefined, 'DELETE')).status, 200)
+  console.log(`✓ Sincronização de 50 partidas em ${bulkMs} ms com 60 ms de latência, sem regravações e com precedência preservada`)
   console.log('✓ Google UUID, sessão HttpOnly, autorização, origem, OAuth state, sync idempotente, gravação, concorrência, modos e privacidade do ranking')
 } finally {
   app?.kill()
   if (signer) await new Promise((resolve) => signer.close(resolve))
+  for (const socket of sockets) socket.destroy()
+  if (proxy) await new Promise((resolve) => proxy.close(resolve))
   await sql`delete from ordle_users where id=${id}`
   await sql.end()
 }
