@@ -307,6 +307,38 @@ describe('modo difícil', () => {
     expect(new Set(keys).size).toBe(WORDS_HARD.length)
   })
 
+  /**
+   * Mesma rede do lote de lançamento do normal: o primeiro lote do difícil,
+   * na ordem em que é servido desde a estreia (#24 em 09/09) até o #91 em
+   * 15/11. Se cair depois de acrescentar palavras a `words-hard.ts`, a lista
+   * foi reembaralhada inteira em vez de ganhar um lote novo em BATCHES.
+   *
+   * São 68 e não 69: CIBÓRIO é o índice 0 da permutação, que só sai quando o
+   * ciclo dá a volta — cada lote novo o empurra para o fim do ciclo maior.
+   */
+  const PRIMEIRO_LOTE_DIFICIL = [
+    'CUSTODIA', 'DIOCESE', 'CABIDO', 'CATEDRA', 'ERMIDA', 'TRIDUO',
+    'LITURGIA', 'RUBRICA', 'VIGILIA', 'SALTERIO', 'BACULO', 'EPIFANIA',
+    'BENCAO', 'ANTIFONA', 'CAPITULO', 'SUDARIO', 'MARTIR', 'JUBILEU',
+    'MATINAS', 'PROPRIO', 'VIATICO', 'ALELUIA', 'LAVABO', 'CORPORAL',
+    'SEPULCRO', 'BATISMO', 'NARTEX', 'HOSTIA', 'RELIQUIA', 'OITAVA',
+    'ABADIA', 'ASPERSAO', 'POBREZA', 'LAUDES', 'GRADUAL', 'PREFACIO',
+    'NOVICO', 'TURIBULO', 'MISSAL', 'CALICE', 'INCENSO', 'ESTOLA',
+    'CENACULO', 'CLAUSURA', 'SANCTUS', 'ABSIDE', 'SINODO', 'COMUNHAO',
+    'PAROQUIA', 'LADAINHA', 'VITRAL', 'DIACONO', 'PATENA', 'CASULA',
+    'CONCILIO', 'SACRARIO', 'ASCENSAO', 'EXEQUIAS', 'INTROITO', 'QUARESMA',
+    'NAVETA', 'ACOLITO', 'RESPONSO', 'CRIPTA', 'CHANTRE', 'ROMARIA',
+    'VIGARIO', 'CINZAS',
+  ]
+
+  it('acrescentar palavras não mexe nos dias já servidos do difícil', () => {
+    const debut = at('2026-09-09')
+    const servidas = PRIMEIRO_LOTE_DIFICIL.map(
+      (_, i) => answerFor(debut + i * 86_400_000, 'hard').key,
+    )
+    expect(servidas).toEqual(PRIMEIRO_LOTE_DIFICIL)
+  })
+
   it('o modo normal é o padrão de answerFor', () => {
     expect(answerFor(at('2026-08-17')).key).toBe(answerFor(at('2026-08-17'), 'normal').key)
   })

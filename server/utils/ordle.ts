@@ -104,9 +104,11 @@ const BATCHES: Record<Mode, { size: number; seed: number }[]> = {
     { size: 69, seed: 20260817 }, // lançamento
     { size: 45, seed: 20260908 }, // segunda leva
     { size: 40, seed: 20260909 }, // terceira leva
+    { size: 40, seed: 20261023 }, // quarta leva
   ],
   hard: [
     { size: 69, seed: 20260910 }, // estreia do modo difícil
+    { size: 66, seed: 20261024 }, // segunda leva do difícil
   ],
 }
 
