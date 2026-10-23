@@ -1,7 +1,7 @@
 import { answerFor, gameId, gameNumber, grade, isMode, nextRolloverAt, MAX_ATTEMPTS } from '../../utils/ordle'
 import { cookieName, cookieOptions, seal, unseal, type Session } from '../../utils/session'
 import { liturgicalDay } from '../../utils/liturgy'
-import { optionalUser } from '../../utils/supabase'
+import { optionalUser } from '../../utils/auth'
 import { gameResponse, readCloudGame } from '../../utils/account'
 
 export default defineEventHandler(async (event) => {

@@ -4,13 +4,13 @@ export default defineNuxtConfig({
   // Vercel Analytics: sem cookie e sem identificador de usuário, então não
   // pede banner de consentimento. Só coleta rodando na Vercel — em dev e em
   // `node .output/server/index.mjs` o script fica inerte.
-  modules: ['@vercel/analytics/nuxt'],
+  modules: ['@vercel/analytics/nuxt', 'nuxt-auth-utils'],
   runtimeConfig: {
-    supabaseServiceRoleKey:
-      process.env.NUXT_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+    databaseUrl: process.env.DATABASE_URL || '',
+    session: { name: 'ordle-account', maxAge: 60 * 60 * 24 * 30 },
+    oauth: { google: { clientId: '', clientSecret: '', redirectURL: '' } },
     public: {
-      supabaseUrl: process.env.NUXT_PUBLIC_SUPABASE_URL || '',
-      supabaseKey: process.env.NUXT_PUBLIC_SUPABASE_KEY || '',
+      accountsEnabled: false,
     },
   },
   css: ['~/assets/css/ordle.css'],

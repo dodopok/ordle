@@ -1,5 +1,6 @@
 import { ensureProfile, sanitizeFirstName } from '../../utils/account'
-import { requireUser, supabaseAdmin } from '../../utils/supabase'
+import { requireUser } from '../../utils/auth'
+import { accountDatabase, databaseOperation } from '../../utils/database'
 
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event)
@@ -15,14 +16,12 @@ export default defineEventHandler(async (event) => {
   }
   if (!Object.keys(updates).length) return { profile }
 
-  const db = supabaseAdmin(event)
-  const { data, error } = await db
-    .from('ordle_profiles')
-    .update(updates)
-    .eq('user_id', user.id)
-    .select('user_id, public_first_name, leaderboard_opt_in')
-    .single()
-  if (error || !data) throw createError({ statusCode: 503, statusMessage: 'account_database_error' })
+  const sql = accountDatabase()
+  const [data] = await databaseOperation(() => sql`
+    update ordle_profiles set ${sql(updates)} where user_id = ${user.id}
+    returning user_id, public_first_name, leaderboard_opt_in
+  `)
+  if (!data) throw createError({ statusCode: 503, statusMessage: 'account_database_error' })
   return {
     profile: {
       userId: data.user_id,

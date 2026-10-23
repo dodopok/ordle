@@ -1,35 +1,6 @@
 <script setup lang="ts">
-import { getSupabaseClient } from '../../utils/supabase'
-
-definePageMeta({ ssr: false })
-
-const error = ref('')
-
-onMounted(async () => {
-  const supabase = getSupabaseClient()
-  const params = new URLSearchParams(window.location.search)
-  const code = params.get('code')
-  const oauthError = params.get('error_description') || params.get('error')
-  if (!supabase || oauthError) {
-    error.value = 'Não foi possível concluir o login.'
-    return
-  }
-
-  if (code) {
-    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
-    if (exchangeError) {
-      error.value = 'Não foi possível concluir o login.'
-      return
-    }
-  }
-
-  const { data, error: sessionError } = await supabase.auth.getSession()
-  if (sessionError || !data.session) {
-    error.value = 'Não foi possível concluir o login.'
-    return
-  }
-  await navigateTo('/')
-})
+// Também recebe callbacks do fluxo antigo que estavam abertos na migração.
+const error = 'Não foi possível concluir o login. Volte ao jogo e entre novamente com Google.'
 </script>
 
 <template>

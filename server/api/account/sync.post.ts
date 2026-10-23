@@ -1,5 +1,6 @@
 import { type H3Event } from 'h3'
-import { requireUser, supabaseAdmin } from '../../utils/supabase'
+import { requireUser } from '../../utils/auth'
+import { accountDatabase, databaseOperation } from '../../utils/database'
 import {
   canonicalGame,
   ensureProfile,
@@ -67,75 +68,45 @@ function safeDeviceId(value: unknown): string {
 }
 
 async function importLegacyStats(event: H3Event, userId: string, snapshot: SyncSnapshot) {
-  const db = supabaseAdmin(event)
+  const sql = accountDatabase()
   for (const mode of MODES) {
     const stats = safeStats(snapshot.stats?.[mode], mode)
-    const { error } = await db.rpc('ordle_import_legacy', {
-      p_user_id: userId,
-      p_migration_id: snapshot.migrationId,
-      p_device_id: snapshot.deviceId,
-      p_mode: mode,
-      p_played: stats.played,
-      p_wins: stats.wins,
-      p_streak: stats.streak,
-      p_max_streak: stats.maxStreak,
-      p_distribution: stats.distribution,
-      p_last_game_id: stats.lastGameId,
-      p_last_result: stats.lastResult,
-      p_game_snapshot: snapshot.games?.[mode] ?? null,
-      p_preferences_snapshot: snapshot.prefs ?? null,
-    })
-    if (error) throw createError({ statusCode: 503, statusMessage: 'account_database_error' })
+    await databaseOperation(() => sql`select ordle_import_legacy(
+      ${userId}::uuid, ${snapshot.migrationId}, ${snapshot.deviceId}, ${mode},
+      ${stats.played}::integer, ${stats.wins}::integer, ${stats.streak}::integer,
+      ${stats.maxStreak}::integer, ${sql.array(stats.distribution)}::integer[],
+      ${stats.lastGameId}::date, ${stats.lastResult},
+      ${sql.json(snapshot.games?.[mode] ?? null)}, ${sql.json(snapshot.prefs ?? null)}
+    )`)
   }
 }
 
 async function importGames(event: H3Event, userId: string, incoming: CanonicalImportedGame[]) {
   if (!incoming.length) return
-  const db = supabaseAdmin(event)
-  const gameIds = [...new Set(incoming.map((game) => game.gameId))]
-  const { data: existingRows, error } = await db
-    .from('ordle_player_games')
-    .select('user_id, game_id, mode, guesses, status, attempts, points, source, updated_at, completed_at')
-    .eq('user_id', userId)
-    .in('game_id', gameIds)
-  if (error) throw createError({ statusCode: 503, statusMessage: 'account_database_error' })
-
-  const existing = new Map(
-    (existingRows ?? []).map((row) => [`${row.mode}:${row.game_id}`, row]),
-  )
+  const sql = accountDatabase()
   for (const game of incoming) {
-    const old = existing.get(`${game.mode}:${game.gameId}`) as Record<string, unknown> | undefined
-    // Uma partida capturada pelo servidor é a autoridade; o snapshot local
-    // só preenche lacunas legadas e nunca rebaixa um resultado server-side.
-    if (old?.source === 'server') continue
-    const oldCanonical = old
-      ? canonicalGame(
-          {
-            gameId: old.game_id,
-            mode: old.mode,
-            guesses: old.guesses,
-            updatedAt: old.updated_at,
-          },
-          game.mode,
-        )
-      : null
-    const chosen = oldCanonical ? betterImportedGame(oldCanonical, game) : game
-    const { error: writeError } = await db.from('ordle_player_games').upsert(
-      {
-        user_id: userId,
-        game_id: chosen.gameId,
-        mode: chosen.mode,
-        guesses: chosen.guesses,
-        status: chosen.status,
-        attempts: chosen.attempts,
-        points: chosen.points,
-        source: 'imported',
-        updated_at: chosen.updatedAt,
-        completed_at: chosen.completedAt,
-      },
-      { onConflict: 'user_id,game_id,mode' },
-    )
-    if (writeError) throw createError({ statusCode: 503, statusMessage: 'account_database_error' })
+    await databaseOperation(() => sql.begin(async (tx) => {
+      // Usa a mesma trava da gravação do servidor, inclusive quando a linha
+      // ainda não existe. Um snapshot nunca sobrescreve um jogo do servidor.
+      await tx`select pg_advisory_xact_lock(hashtextextended(
+        ${userId + ':' + game.gameId + ':' + game.mode}, 0))`
+      const [old] = await tx`select * from ordle_player_games
+        where user_id = ${userId} and game_id = ${game.gameId} and mode = ${game.mode} for update`
+      if (old?.source === 'server') return
+      const oldCanonical = old ? canonicalGame({
+        gameId: old.game_id, mode: old.mode, guesses: old.guesses, updatedAt: old.updated_at,
+      }, game.mode) : null
+      const chosen = oldCanonical ? betterImportedGame(oldCanonical, game) : game
+      await tx`insert into ordle_player_games
+        (user_id, game_id, mode, guesses, status, attempts, points, source, updated_at, completed_at)
+        values (${userId}, ${chosen.gameId}, ${chosen.mode}, ${tx.json(chosen.guesses)},
+          ${chosen.status}, ${chosen.attempts}, ${chosen.points}, 'imported',
+          ${chosen.updatedAt}, ${chosen.completedAt})
+        on conflict (user_id, game_id, mode) do update set
+          guesses = excluded.guesses, status = excluded.status, attempts = excluded.attempts,
+          points = excluded.points, updated_at = excluded.updated_at, completed_at = excluded.completed_at
+        where ordle_player_games.source = 'imported'`
+    }))
   }
 }
 
@@ -193,12 +164,9 @@ export default defineEventHandler(async (event) => {
   await importLegacyStats(event, user.id, snapshot)
   await importGames(event, user.id, importedGames(snapshot))
 
-  const db = supabaseAdmin(event)
-  const { error: preferencesError } = await db
-    .from('ordle_profiles')
-    .update({ preferences: snapshot.prefs })
-    .eq('user_id', user.id)
-  if (preferencesError) throw createError({ statusCode: 503, statusMessage: 'account_database_error' })
+  const sql = accountDatabase()
+  await databaseOperation(() => sql`update ordle_profiles
+    set preferences = ${sql.json(snapshot.prefs)} where user_id = ${user.id}`)
 
   const currentId = gameId()
   const games = {} as SyncSnapshot['games']

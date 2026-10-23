@@ -1,5 +1,5 @@
 import { createError } from 'h3'
-import { supabaseAdmin } from '../utils/supabase'
+import { accountDatabase, databaseOperation } from '../utils/database'
 import { isMode, type Mode } from '../utils/ordle'
 import { aggregateRankingStats, type RankingStatsRow } from '../utils/ranking'
 
@@ -9,24 +9,15 @@ export default defineEventHandler(async (event) => {
   if (rawMode !== undefined && !mode)
     throw createError({ statusCode: 400, statusMessage: 'invalid_mode' })
 
-  const db = supabaseAdmin(event)
-  let query = db
-    .from('ordle_stats')
-    .select('user_id, mode, played, wins, distribution')
-    .gt('wins', 0)
-  if (mode) query = query.eq('mode', mode)
-  const { data: stats, error } = await query.limit(10_000)
-  if (error) throw createError({ statusCode: 503, statusMessage: 'account_database_error' })
-
-  const ids = [...new Set((stats ?? []).map((stat) => stat.user_id))]
-  if (!ids.length) return { mode, entries: [] }
-  const { data: profiles, error: profileError } = await db
-    .from('ordle_profiles')
-    .select('user_id, public_first_name')
-    .eq('leaderboard_opt_in', true)
-    .in('user_id', ids)
-  if (profileError) throw createError({ statusCode: 503, statusMessage: 'account_database_error' })
-
+  const sql = accountDatabase()
+  const stats = await databaseOperation(() => sql`
+    select s.user_id, s.mode, s.played, s.wins, s.distribution, p.public_first_name
+    from ordle_stats s join ordle_profiles p on p.user_id = s.user_id
+    where s.wins > 0 and p.leaderboard_opt_in = true
+      ${mode ? sql`and s.mode = ${mode}` : sql``}
+    limit 10000
+  `)
+  const profiles = stats
   const names = new Map((profiles ?? []).map((profile) => [profile.user_id, profile.public_first_name]))
   const rowsByUser = new Map<string, RankingStatsRow[]>()
   for (const stat of (stats ?? []) as RankingStatsRow[]) {
